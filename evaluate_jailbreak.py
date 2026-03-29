@@ -447,30 +447,41 @@ def evaluate_model(
 
 
 if __name__ == "__main__":
-    model_ids = [
-        "Qwen/Qwen2.5-7B-Instruct",
-        "meta-llama/Llama-3.1-8B-Instruct",
-        "Qwen/Qwen2.5-3B-Instruct",
-        "Qwen/Qwen2.5-14B-Instruct",
-        "meta-llama/Llama-3.2-3B-Instruct",
-        "google/gemma-2-9b-it",
-    ]
+    # model_ids = [
+    #     "Qwen/Qwen2.5-7B-Instruct",
+    #     "meta-llama/Llama-3.1-8B-Instruct",
+    #     "Qwen/Qwen2.5-3B-Instruct",
+    #     "Qwen/Qwen2.5-14B-Instruct",
+    #     "meta-llama/Llama-3.2-3B-Instruct",
+    #     "google/gemma-2-9b-it",
+    # ]
 
-    methods = [
-        # "substring_matching",
-        "llamaguard3",
-        # "harmbench",
-        # "llmjudge",
-    ]
+    # methods = [
+    #     # "substring_matching",
+    #     "llamaguard3",
+    #     # "harmbench",
+    #     # "llmjudge",
+    # ]
 
-    for method in methods:
-        for model_id in model_ids:
-            evaluate_model(
-                model_id=model_id,
-                method=method,
-                data_type="harmful",
-                language="en",
-                output_path="/home/ian/repos/llm-activation-control/output/",
-                included_direction_ids=[MAX_SIM_DIR_ID[model_id], "pca_0"],
-                adaptive_mode=1,
-            )
+    # for method in methods:
+    #     for model_id in model_ids:
+    #         evaluate_model(
+    #             model_id=model_id,
+    #             method=method,
+    #             data_type="harmful",
+    #             language="en",
+    #             output_path="/home/ian/repos/llm-activation-control/output/",
+    #             included_direction_ids=[MAX_SIM_DIR_ID[model_id], "pca_0"],
+    #             adaptive_mode=1,
+    #         )
+
+    # Only evaluate the requested row:
+    evaluate_model(
+        model_id="Qwen/Qwen2.5-3B-Instruct",
+        method="harmbench",
+        data_type="harmful",
+        language="en",
+        output_path="output/",
+        included_direction_ids=[MAX_SIM_DIR_ID["Qwen/Qwen2.5-3B-Instruct"], "pca_0"],
+        adaptive_mode=1,
+    )
