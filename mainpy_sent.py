@@ -11,7 +11,7 @@ def main():
         print("NOW STEERING FOR DEGREE ", degree)
 
         steering = AngularSteering(llm)
-        steering.load_config_from_file("output/Qwen2.5-3B-Instruct/STMT/steering_config-en-max_sim_28_mid-pca_0.npy")
+        steering.load_config_from_file("output/Qwen2.5-3B-Instruct/STMT/steering_config-en-max_sim_27_mid-pca_0.npy")
         steering.apply_steering(target_degree=degree, adaptive_mode=0)
 
         # Example prompts
