@@ -292,7 +292,7 @@ def main():
         "--model",
         type=str,
         required=True,
-        help="HuggingFace model ID (e.g., 'Qwen/Qwen2.5-7B-Instruct')",
+        help="HuggingFace model ID (e.g., 'Qwen/Qwen2.5-3B-Instruct')",
     )
     parser.add_argument(
         "--output-dir",
