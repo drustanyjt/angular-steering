@@ -131,13 +131,16 @@ class AngularSteeringOperator:
         self, theta: float, device: torch.device, dtype: torch.dtype
     ) -> torch.Tensor:
         """Get cached rotation vector v_theta = cos(θ)*b1 + sin(θ)*b2."""
-        # Normalize theta to [0, 360) for consistent caching
-        theta_normalized = theta % 360
-        cache_key = (device, dtype, theta_normalized)
+        # # Normalize theta to [0, 360) for consistent caching
+        # theta_normalized = theta % 360
+        # cache_key = (device, dtype, theta_normalized)
+        cache_key = (device, dtype, float(theta))
+
 
         if cache_key not in self._rotation_cache:
             cached = self._get_device_tensors(device, dtype)
-            theta_rad = torch.tensor(theta_normalized * torch.pi / 180.0)
+            theta_rad = torch.tensor(theta * torch.pi / 180.0)
+
             self._rotation_cache[cache_key] = (
                 torch.cos(theta_rad) * cached["b1"]
                 + torch.sin(theta_rad) * cached["b2"]
@@ -185,7 +188,7 @@ class AngularSteeringOperator:
         if adaptive_mode == 0:
             # Non-adaptive: always steer
             # h' = h - P*h + r * v_theta
-            steered = hidden_states - proj_h + r * v_theta
+            steered = hidden_states - proj_h + r * v_theta *2
             return steered
 
         elif adaptive_mode == 1:
