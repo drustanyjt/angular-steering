@@ -1,6 +1,6 @@
 import os
 from vllm import LLM, SamplingParams
-from vllm_angular_steering import AngularSteering
+from vllm_angular_steering_sentiment import AngularSteering
 
 def main():
     os.environ["VLLM_ALLOW_INSECURE_SERIALIZATION"] = "1"
