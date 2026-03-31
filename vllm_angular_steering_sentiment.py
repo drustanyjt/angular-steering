@@ -188,7 +188,7 @@ class AngularSteeringOperator:
         if adaptive_mode == 0:
             # Non-adaptive: always steer
             # h' = h - P*h + r * v_theta
-            steered = hidden_states - proj_h + r * v_theta *2
+            steered = hidden_states - proj_h + r * v_theta *5
             return steered
 
         elif adaptive_mode == 1:
