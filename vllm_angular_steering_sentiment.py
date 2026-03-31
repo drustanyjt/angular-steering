@@ -752,7 +752,7 @@ def main():
     parser.add_argument(
         "--tensor-parallel-size",
         type=int,
-        default=1,v
+        default=1,
         help="Tensor parallel size for vLLM",
     )
     parser.add_argument(
