@@ -21,6 +21,40 @@ from sklearn.model_selection import train_test_split
 # =============================================================================
 # Data Loading Utilities
 # =============================================================================
+def get_negative_instructions():
+    instructions = [
+        "The situation feels bleak and discouraging.",
+        "Today has been overwhelmingly disappointing.",
+        "Nothing seems to be going right lately.",
+        "I feel irritated by how things have turned out.",
+        "This experience left a bitter and unpleasant impression.",
+        "The outcome was far worse than I expected.",
+        "Everything feels heavier and more frustrating than it should.",
+        "I’m struggling to find anything positive about this.",
+        "The atmosphere feels tense and uncomfortable.",
+        "Overall, it has been a discouraging and unhappy time.",
+    ]
+
+    train, test = train_test_split(instructions, test_size=0.2, random_state=42)
+    return train, test
+
+
+def get_positive_instructions():
+    instructions = [
+        "The situation feels uplifting and encouraging.",
+        "Today has been wonderfully pleasant.",
+        "Everything seems to be going smoothly lately.",
+        "I feel grateful for how things have turned out.",
+        "This experience left a warm and joyful impression.",
+        "The outcome was better than I expected.",
+        "Everything feels lighter and more hopeful than before.",
+        "I’m finding many things to appreciate right now.",
+        "The atmosphere feels calm and welcoming.",
+        "Overall, it has been an encouraging and happy time.",
+    ]
+
+    train, test = train_test_split(instructions, test_size=0.2, random_state=42)
+    return train, test
 
 
 def get_harmful_instructions():
@@ -54,6 +88,10 @@ def get_input_data(
         return get_harmful_instructions()
     elif data_type == "harmless":
         return get_harmless_instructions()
+    elif data_type == "positive":
+        return get_positive_instructions()
+    elif data_type == "negative":
+        return get_negative_instructions()
     else:
         raise ValueError(f"Unknown data_type: {data_type}")
 
