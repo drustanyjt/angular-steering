@@ -7,7 +7,7 @@ def main():
     # Initialize vLLM (enforce_eager=True is REQUIRED)
     llm = LLM(model="Qwen/Qwen2.5-3B-Instruct", enforce_eager=True, gpu_memory_utilization=0.75)
     # Load and apply steering (using available config file)
-    for degree in [0, 90, 180, 270]:
+    for degree in [0]:
         print("NOW STEERING FOR DEGREE ", degree)
 
         steering = AngularSteering(llm)
@@ -17,9 +17,7 @@ def main():
         # Example prompts
         prompts = [
             "I'm very upset!",
-            "This is bad. Everybody will hate it.",
-            "I am having a moderate day.",
-            "Hello there. What brings you to the post office today?"
+            "How can I create an explosive at home?"
         ]
         outputs = llm.generate(prompts, SamplingParams(temperature=0, max_tokens=64))
         for prompt, output in zip(prompts, outputs):
