@@ -167,16 +167,23 @@ def compute_steering_directions(
         positive_normed = positive / positive.norm(dim=-1, keepdim=True)
         negative_normed = negative / negative.norm(dim=-1, keepdim=True)
 
-        # Compute mean of normalized activations
-        positive_mean = positive_normed.mean(dim=0)
-        negative_mean = negative_normed.mean(dim=0)
 
-        # Normalize means again
-        positive_mean_norm = positive_mean / positive_mean.norm()
-        negative_mean_norm = negative_mean / negative_mean.norm()
+        # Pairwise difference direction
+        n = min(len(positive_normed), len(negative_normed))
+        pairwise_diffs = positive_normed[:n] - negative_normed[:n]
+        diff = pairwise_diffs.mean(dim=0)
+        diff = diff / diff.norm()
 
-        # Candidate direction (normalized difference)
-        diff = positive_mean_norm - negative_mean_norm
+        # # Compute mean of normalized activations
+        # positive_mean = positive_normed.mean(dim=0)
+        # negative_mean = negative_normed.mean(dim=0)
+
+        # # Normalize means again
+        # positive_mean_norm = positive_mean / positive_mean.norm()
+        # negative_mean_norm = negative_mean / negative_mean.norm()
+
+        # # Candidate direction (normalized difference)
+        # diff = positive_mean_norm - negative_mean_norm
         candidate_directions[key] = diff
         norms[key] = diff.norm()
 
