@@ -5,7 +5,7 @@ from vllm_angular_steering import AngularSteering
 def main():
     os.environ["VLLM_ALLOW_INSECURE_SERIALIZATION"] = "1"
     # Initialize vLLM (enforce_eager=True is REQUIRED)
-    llm = LLM(model="Qwen/Qwen2.5-3B-Instruct", enforce_eager=True, gpu_memory_utilization=0.75)
+    llm = LLM(model="Qwen/Qwen2.5-7B-Instruct", enforce_eager=True, gpu_memory_utilization=0.75)
     # Load and apply steering (using available config file)
     steering = AngularSteering(llm)
     steering.load_config_from_file("output/STMT/steering_config-en-max_norm_23_post-pca_0.npy")
