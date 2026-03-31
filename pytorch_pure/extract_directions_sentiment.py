@@ -341,7 +341,7 @@ def main():
 
     # Create output directory
     model_name = args.model.split("/")[-1]
-    output_path = Path(args.output_dir) / model_name /"STMT2"
+    output_path = Path(args.output_dir) / model_name /"STMT"
     output_path.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"Loading model: {args.model}")
