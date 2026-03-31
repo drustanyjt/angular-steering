@@ -17,8 +17,9 @@ def main():
         # Example prompts
         prompts = [
             "I'm very upset!",
-            "The outcome was far worse than I expected.",
-            "Paraphrase this: 'Ugh, this is horrible and stupid!'"
+            "This is bad. Everybody will hate it.",
+            "I am having a moderate day.",
+            "Hello there. What brings you to the post office today?"
         ]
         outputs = llm.generate(prompts, SamplingParams(temperature=0, max_tokens=64))
         for prompt, output in zip(prompts, outputs):
