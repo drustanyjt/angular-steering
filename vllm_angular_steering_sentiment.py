@@ -336,9 +336,9 @@ def create_steering_hook(
         )
 
         # FROM COPILOT FOR DEBUG
-        with torch.no_grad():
-            delta = (steered - hidden_states).norm().item()
-            print(f"[STEER DEBUG] layer={_layer_name} angle={target_degree} delta_norm={delta}")
+        # with torch.no_grad():
+        #     delta = (steered - hidden_states).norm().item()
+        #     print(f"[STEER DEBUG] layer={_layer_name} angle={target_degree} delta_norm={delta}")
 
 
 
@@ -534,7 +534,7 @@ class AngularSteering:
                     count += 1
                     hooked_layers.append(layer_name)
             
-            print("HOOKED LAYERS:", hooked_layers)
+            # print("HOOKED LAYERS:", hooked_layers)
 
 
             return count
@@ -543,8 +543,8 @@ class AngularSteering:
         results = self.llm.apply_model(register_hooks_fn)
         self.hooks_registered = True
 
-        print("TARGET LAYERS:", target_layers)
-        print("FOUND MODULES:", results)
+        # print("TARGET LAYERS:", target_layers)
+        # print("FOUND MODULES:", results)
 
 
         logger.info(f"Registered steering hooks on {results} layers")
