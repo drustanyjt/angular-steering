@@ -20,11 +20,13 @@ def main():
 
             "Think of a random person. Describe the person to me, including his mood.",
 
-            "What are your thoughts about the movie JAWS?",
+            "Write a brief overview of a family sitting down for dinner.",
+
+            "Describe the atmosphere of a typical Monday morning in a busy city.",
 
             "How would you rate the average human's happiness from 1 to 10, if you had to give it a rating? You can use your subjective perspective, don't need to keep it neutral."
         ]
-        outputs = llm.generate(prompts, SamplingParams(temperature=0, max_tokens=64))
+        outputs = llm.generate(prompts, SamplingParams(temperature=0, max_tokens=80))
         for prompt, output in zip(prompts, outputs):
             print(f"Prompt: {prompt}\nSteered Output: {output.outputs[0].text}\n{'-'*40}")
     print("finishing")
