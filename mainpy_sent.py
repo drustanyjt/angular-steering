@@ -7,7 +7,7 @@ def main():
     # Initialize vLLM (enforce_eager=True is REQUIRED)
     llm = LLM(model="Qwen/Qwen2.5-3B-Instruct", enforce_eager=True, gpu_memory_utilization=0.75)
     # Load and apply steering (using available config file)
-    for degree in [0]:
+    for degree in [0, 180]:
         print("NOW STEERING FOR DEGREE ", degree)
 
         steering = AngularSteering(llm)
