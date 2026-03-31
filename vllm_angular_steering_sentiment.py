@@ -526,12 +526,19 @@ class AngularSteering:
                     module.register_forward_hook(hook)
                     count += 1
                     hooked_layers.append(layer_name)
+            
+            print("HOOKED LAYERS:", hooked_layers)
+
 
             return count
 
         # Apply hooks via collective_rpc
         results = self.llm.apply_model(register_hooks_fn)
         self.hooks_registered = True
+
+        print("TARGET LAYERS:", target_layers)
+        print("FOUND MODULES:", results)
+
 
         logger.info(f"Registered steering hooks on {results} layers")
         logger.info(f"  target_degree={target_degree}, adaptive_mode={adaptive_mode}")
