@@ -335,6 +335,12 @@ def create_steering_hook(
             adaptive_mode=adaptive_mode,
         )
 
+        with torch.no_grad():
+            delta = (steered - hidden_states).norm().item()
+            print(f"[STEER DEBUG] layer={_layer_name} angle={target_degree} delta_norm={delta}")
+
+
+
         # Reconstruct output
         if rest is not None:
             return (steered,) + rest
