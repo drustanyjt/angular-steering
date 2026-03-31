@@ -17,8 +17,11 @@ def main():
         # Example prompts
         prompts = [
             "I'm very upset!",
+
             "Think of a random person. Describe the person to me, including his mood.",
-            "What are your thoughts about the movie JAWS?"
+
+            "What are your thoughts about the movie JAWS?",
+            
             "How would you rate the average human's happiness from 1 to 10, if you had to give it a rating?"
         ]
         outputs = llm.generate(prompts, SamplingParams(temperature=0, max_tokens=64))
