@@ -74,9 +74,10 @@ def extract_activations(
             # Hook for resid_post (end of transformer block)
             if "post" in positions:
                 cache_key_prefix = f"layer_{layer_idx}"
+                ln_name = f"{layer_name}.post_attention_layernorm"
                 forward_hooks.append(
                     (
-                        module_dict[layer_name],
+                        module_dict[ln_name],
                         get_residual_hook(
                             cache_key_prefix, cache, ["post"], extract_positions=[-1]
                         ),
@@ -340,7 +341,7 @@ def main():
 
     # Create output directory
     model_name = args.model.split("/")[-1]
-    output_path = Path(args.output_dir) / model_name /"STMT"
+    output_path = Path(args.output_dir) / model_name /"STMT2"
     output_path.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"Loading model: {args.model}")
