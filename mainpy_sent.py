@@ -9,7 +9,7 @@ def main():
     # Load and apply steering (using available config file)
     steering = AngularSteering(llm)
     steering.load_config_from_file("output/Qwen2.5-3B-Instruct/STMT/steering_config-en-max_norm_35_post-pca_0.npy")
-    steering.apply_steering(target_degree=170, adaptive_mode=0)
+    steering.apply_steering(target_degree=10, adaptive_mode=0)
 
     # Example prompts
     prompts = [
