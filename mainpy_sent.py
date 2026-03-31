@@ -17,11 +17,9 @@ def main():
         # Example prompts
         prompts = [
             "I'm very upset!",
-            "Tell me in one sentence how you feel right now.",
-            "I like cats.",
-            "What are your thoughts about this movie?",
-            "Are you feeling more optimistic or pessimistic right now?",
-            "Are you feeling happier or sadder right now, if you had to pick one?"
+            "Think of a random person. Describe the person to me, including his mood.",
+            "What are your thoughts about the movie JAWS?"
+            "How would you rate the average human's happiness from 1 to 10, if you had to give it a rating?"
         ]
         outputs = llm.generate(prompts, SamplingParams(temperature=0, max_tokens=64))
         for prompt, output in zip(prompts, outputs):
