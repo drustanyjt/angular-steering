@@ -476,12 +476,23 @@ if __name__ == "__main__":
     #         )
 
     # Only evaluate the requested row:
+    # Use substring_matching for lightweight refusal evaluation
     evaluate_model(
         model_id="Qwen/Qwen2.5-3B-Instruct",
-        method="harmbench",
+        method="substring_matching",
         data_type="harmful",
         language="en",
         output_path="output/",
         included_direction_ids=[MAX_SIM_DIR_ID["Qwen/Qwen2.5-3B-Instruct"], "pca_0"],
         adaptive_mode=1,
     )
+    # To use HarmBench again, just uncomment below:
+    # evaluate_model(
+    #     model_id="Qwen/Qwen2.5-3B-Instruct",
+    #     method="harmbench",
+    #     data_type="harmful",
+    #     language="en",
+    #     output_path="output/",
+    #     included_direction_ids=[MAX_SIM_DIR_ID["Qwen/Qwen2.5-3B-Instruct"], "pca_0"],
+    #     adaptive_mode=1,
+    # )
