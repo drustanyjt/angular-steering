@@ -43,6 +43,7 @@ MODEL_CONFIGS = {
     "32B": {
         "model_id": "Qwen/Qwen2.5-32B-Instruct",
         "config": None,  # will be set after extraction
+        "max_model_len": 4096,
     },
     "Llama-3B": {
         "model_id": "meta-llama/Llama-3.2-3B-Instruct",
@@ -188,7 +189,12 @@ def main():
     writer = ResultWriter(out_path)
 
     # Load model
-    llm = LLM(model=model_id, enforce_eager=True, gpu_memory_utilization=0.90)
+    llm_kwargs = dict(model=model_id, enforce_eager=True, gpu_memory_utilization=0.90)
+    if "max_model_len" in cfg:
+        llm_kwargs["max_model_len"] = cfg["max_model_len"]
+    if "quantization" in cfg:
+        llm_kwargs["quantization"] = cfg["quantization"]
+    llm = LLM(**llm_kwargs)
     sampling_params = SamplingParams(temperature=0, max_tokens=args.max_tokens)
 
     # Build restate prompts
