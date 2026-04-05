@@ -188,7 +188,7 @@ class AngularSteeringOperator:
         if adaptive_mode == 0:
             # Non-adaptive: always steer
             # h' = h - P*h + r * v_theta
-            steered = hidden_states - proj_h + r * v_theta *10
+            steered = hidden_states - proj_h + r * v_theta
             return steered
 
         elif adaptive_mode == 1:
@@ -205,6 +205,52 @@ class AngularSteeringOperator:
 
         else:
             raise ValueError(f"Unknown adaptive_mode: {adaptive_mode}. Supported: 0, 1")
+
+    def caa(
+        self,
+        hidden_states: torch.Tensor,
+        alpha: float,
+    ) -> torch.Tensor:
+        """
+        Apply contrastive activation addition (CAA) to hidden states.
+
+        Simple additive steering: h' = h + α * b1
+        where b1 is the normalized first_direction (positive - negative).
+        Positive α pushes toward positive, negative α toward negative.
+
+        Args:
+            hidden_states: Tensor of shape (..., hidden_dim)
+            alpha: Scaling coefficient for the direction vector
+
+        Returns:
+            Steered hidden states with same shape as input
+        """
+        device = hidden_states.device
+        dtype = hidden_states.dtype
+        cached = self._get_device_tensors(device, dtype)
+        return hidden_states + alpha * cached["b1"]
+
+    def ablation(
+        self,
+        hidden_states: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Apply directional ablation — remove the component along first_direction.
+
+        h' = h - (h · d̂) * d̂
+
+        Args:
+            hidden_states: Tensor of shape (..., hidden_dim)
+
+        Returns:
+            Hidden states with direction component removed
+        """
+        device = hidden_states.device
+        dtype = hidden_states.dtype
+        cached = self._get_device_tensors(device, dtype)
+        d = cached["b1"]
+        proj = (hidden_states @ d).unsqueeze(-1) * d
+        return hidden_states - proj
 
     def clear_cache(self):
         """Clear all cached tensors."""
@@ -329,11 +375,22 @@ def create_steering_hook(
         state["last_theta"] = target_degree
 
         # Apply steering
-        steered = current_operator.steer(
-            hidden_states=hidden_states,
-            target_degree=target_degree,
-            adaptive_mode=adaptive_mode,
-        )
+        steering_method = state.get("steering_method", "angular")
+        if steering_method == "caa":
+            steered = current_operator.caa(
+                hidden_states=hidden_states,
+                alpha=target_degree,  # reuse target_degree as alpha for CAA
+            )
+        elif steering_method == "ablation":
+            steered = current_operator.ablation(
+                hidden_states=hidden_states,
+            )
+        else:
+            steered = current_operator.steer(
+                hidden_states=hidden_states,
+                target_degree=target_degree,
+                adaptive_mode=adaptive_mode,
+            )
 
         # FROM COPILOT FOR DEBUG
         # with torch.no_grad():
@@ -456,6 +513,7 @@ class AngularSteering:
         target_degree: float = 0.0,
         adaptive_mode: int = 1,
         prompt_only: bool = False,
+        steering_method: str = "angular",
     ) -> Dict[str, int]:
         """
         Apply steering by registering hooks on model layers.
@@ -465,10 +523,11 @@ class AngularSteering:
         to change parameters without re-registering hooks.
 
         Args:
-            target_degree: Rotation angle in degrees (0-360)
+            target_degree: Rotation angle in degrees (0-360), or alpha for CAA
             adaptive_mode: Steering mode (0=non-adaptive, 1=adaptive)
             prompt_only: If True, only steer during prompt processing (prefill phase).
                          If False, steer all tokens including model-generated output (decode phase).
+            steering_method: "angular", "caa", or "ablation"
 
         Returns:
             Dictionary with registration results
@@ -501,6 +560,7 @@ class AngularSteering:
             builtins._steering_state["target_degree"] = target_degree
             builtins._steering_state["adaptive_mode"] = adaptive_mode
             builtins._steering_state["enabled"] = True
+            builtins._steering_state["steering_method"] = steering_method
 
             builtins._steering_state["is_first_pass"] = True
             builtins._steering_state["last_theta"] = None

@@ -416,45 +416,26 @@ def main():
 
         # Create config dict for ALL layers using the selected strategy's directions
         # Match parent structure: save entries for BOTH layernorm modules
-        # config_all_layers = {}
-        # layernorm_modules = ["input_layernorm", "post_attention_layernorm"]
-
-        # num_layers = len(layers)
-        # for layer_idx in layers:
-        #     for module in layernorm_modules:
-        #         if module != "input_layernorm":
-        #             # post_attention_layernorm: use same layer
-        #             module_name = f"model.layers.{layer_idx}.{module}"
-        #         elif layer_idx < num_layers - 1:
-        #             # input_layernorm: use NEXT layer (parent's pattern)
-        #             module_name = f"model.layers.{layer_idx + 1}.{module}"
-        #         else:
-        #             # Skip last layer's input_layernorm
-        #             continue
-
-        #         config_all_layers[module_name] = {
-        #             "first_direction": first_direction,
-        #             "second_direction": second_direction,
-        #         }
-
-        # Create config dict ONLY for the selected layer
         config_all_layers = {}
-
         layernorm_modules = ["input_layernorm", "post_attention_layernorm"]
 
-        # best_layer_idx and first_direction/second_direction are already defined above
-        for module in layernorm_modules:
-            if module == "input_layernorm":
-                # input_layernorm lives on the NEXT layer (parent pattern)
-                module_name = f"model.layers.{best_layer_idx + 1}.{module}"
-            else:
-                # post_attention_layernorm lives on the SAME layer
-                module_name = f"model.layers.{best_layer_idx}.{module}"
+        num_layers = len(layers)
+        for layer_idx in layers:
+            for module in layernorm_modules:
+                if module != "input_layernorm":
+                    # post_attention_layernorm: use same layer
+                    module_name = f"model.layers.{layer_idx}.{module}"
+                elif layer_idx < num_layers - 1:
+                    # input_layernorm: use NEXT layer (parent's pattern)
+                    module_name = f"model.layers.{layer_idx + 1}.{module}"
+                else:
+                    # Skip last layer's input_layernorm
+                    continue
 
-            config_all_layers[module_name] = {
-                "first_direction": first_direction,
-                "second_direction": second_direction,
-            }
+                config_all_layers[module_name] = {
+                    "first_direction": first_direction,
+                    "second_direction": second_direction,
+                }
 
 
         filename = f"steering_config-{args.language}-{strategy}_{best_layer_idx}_{position}-pca_0.npy"
