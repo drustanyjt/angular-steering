@@ -142,6 +142,7 @@ def main():
     parser.add_argument("--tsad-path", type=str, default="tsad/test.csv")
     parser.add_argument("--angular-step", type=int, default=30)
     parser.add_argument("--max-tokens", type=int, default=80)
+    parser.add_argument("--config", type=str, default=None, help="Path to steering config .npy file (overrides auto-detect)")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -149,10 +150,12 @@ def main():
     model_id = cfg["model_id"]
     model_name = model_id.split("/")[-1]
 
-    if cfg["config"] is not None:
+    if args.config is not None:
+        config_path = args.config
+    elif cfg["config"] is not None:
         config_path = f"output/{model_name}/STMT/{cfg['config']}"
     else:
-        # Auto-detect: find the first STMT config for this model
+        # Auto-detect: prefer max_sim over max_norm
         stmt_dir = Path(f"output/{model_name}/STMT")
         if not stmt_dir.exists():
             print(f"ERROR: No STMT configs found for {model_name}.")
@@ -162,7 +165,8 @@ def main():
         if not npy_files:
             print(f"ERROR: No steering configs in {stmt_dir}")
             sys.exit(1)
-        config_path = str(npy_files[0])
+        sim_files = [f for f in npy_files if "max_sim" in f.name]
+        config_path = str(sim_files[0] if sim_files else npy_files[0])
         print(f"Auto-detected config: {config_path}")
 
     angular_angles = list(range(0, 360, args.angular_step))
