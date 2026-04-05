@@ -26,9 +26,9 @@ echo "============================================"
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- Installing dependencies ---"
-pip install vllm>=0.11.0 numpy pandas tqdm scikit-learn transformers accelerate
+pip install 'vllm>=0.11.0' numpy pandas tqdm scikit-learn transformers accelerate
 # pytorch_pure extraction also needs these
-pip install torch>=2.0.0 datasets>=2.14.0
+pip install 'torch>=2.0.0' 'datasets>=2.14.0'
 
 # ---------------------------------------------------------------------------
 # 2. Extract sentiment directions if needed
