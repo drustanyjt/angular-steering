@@ -94,7 +94,10 @@ def make_line_plot(df: pd.DataFrame, output_dir: Path):
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    fig.write_image(str(output_dir / "layer_sweep_line.pdf"))
+    try:
+        fig.write_image(str(output_dir / "layer_sweep_line.pdf"))
+    except Exception:
+        pass  # PDF export requires Chrome; HTML is always saved
     fig.write_html(str(output_dir / "layer_sweep_line.html"))
     print(f"Saved line plot to {output_dir}")
 
@@ -130,7 +133,6 @@ def make_polar_plot(df: pd.DataFrame, output_dir: Path, num_layers: int):
         for metric in METRICS:
             values = list(sub[metric])
             values_closed = values + [values[0]]
-            polar_kw = dict(polar=f"polar{col_idx}" if col_idx > 1 else "polar")
             fig.add_trace(
                 go.Scatterpolar(
                     r=values_closed,
@@ -139,7 +141,7 @@ def make_polar_plot(df: pd.DataFrame, output_dir: Path, num_layers: int):
                     line=dict(color=COLOUR_MAP[metric], width=2),
                     mode="lines",
                     showlegend=(col_idx == 1),
-                    **polar_kw,
+                    subplot=f"polar{col_idx}" if col_idx > 1 else "polar",
                 ),
                 row=1,
                 col=col_idx,
@@ -174,7 +176,10 @@ def make_polar_plot(df: pd.DataFrame, output_dir: Path, num_layers: int):
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    fig.write_image(str(output_dir / "layer_sweep_polar.pdf"))
+    try:
+        fig.write_image(str(output_dir / "layer_sweep_polar.pdf"))
+    except Exception:
+        pass  # PDF export requires Chrome; HTML is always saved
     fig.write_html(str(output_dir / "layer_sweep_polar.html"))
     print(f"Saved polar plot to {output_dir}")
 
