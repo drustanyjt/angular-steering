@@ -1,0 +1,6 @@
+{
+  "max_sim_layer": 14,
+  "max_sim_act_idx": 0,
+  "max_norm_layer": 24,
+  "max_norm_act_idx": 1
+}
