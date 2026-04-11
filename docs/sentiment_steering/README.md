@@ -132,17 +132,45 @@ away. Default to **mode 0** unless you have a specific reason.
 
 ### Scale dramatically affects template winners
 
-| Model | max_sim config | Best template | Worst template |
+| Model | config used | Best template | Worst template |
 |-------|---|---|---|
-| 3B | *MISSING* (only max_norm) | rewrite | echo_en (baseline 14%!) |
-| 7B | max_sim_19_mid | **echo_en** | restate |
-| 14B | max_sim_36_mid | ? | restate (72% @ 270°) |
-| 32B | max_sim_47_mid | ? | restate (broad CN leaks) |
+| 3B | max_sim_27_mid **L20-30** subset | **rewrite** (0.4% mean) | echo_en (15% mean) |
+| 7B | max_sim_19_mid (all layers) | **echo_en** (4.9% mean) | rewrite (14.3% mean) |
+| 14B | max_sim_36_mid | ? (not yet rerun with echo_en) | restate (72% @ 270°) |
+| 32B | max_sim_47_mid | ? (not yet rerun with echo_en) | restate (broad CN leaks) |
 
 **Critical:** Do not assume `echo_en` will transfer to larger models without
-re-running discovery. On 3B, `echo_en` fails at baseline because the smaller
-model over-interprets the trailing colon as "start a numbered list" and loops
-on that format. The winning template is model-specific.
+re-running discovery. The best template inverts between 3B and 7B —
+on 3B `echo_en` fails at baseline (list-expansion lock-in from the trailing
+colon), and on 7B `rewrite` fails at 120°-180° (catastrophic repetition at
+the sentiment transition zone). The winning template is model-specific.
+
+The most cross-model-consistent template is `similar_tweet_en` — 210° clean
+on 7B and 360° clean on 3B. Not the best on either, but the only one without
+a catastrophic failure somewhere.
+
+### 3B needs layer-subset steering (not all-layer)
+
+Applying angular steering at every layer of Qwen2.5-3B destroys outputs
+(42-99% degenerate across angles), even though CAA with the same direction
+is completely clean. The problem is the angular rotation math: it *removes*
+the projection of the activation onto the {b1, b2} plane and replaces it
+with a unit vector in direction v_theta. Repeating this rotation at 71
+module entries (36 layers × 2 layernorm modules each) compounds into
+coherence destruction.
+
+The fix is to apply steering only at a **subset of layers** near the peak
+cosine-similarity layer. On 3B, `filter_config_layers.py` was used to
+produce:
+- `max_sim_27_mid_L27only` (1 layer, 2 modules) — clean but weak (62-85%
+  steering effect)
+- `max_sim_27_mid_L25-29`  (5 layers, 10 modules) — clean, subtle shifts
+- **`max_sim_27_mid_L20-30` (11 layers, 22 modules)** — clean, real
+  sentiment flips (95-100% effect), now the default 3B config
+
+On 7B, the full-layer config works fine because 7B's sentiment direction is
+more consistent across layers (higher cosine). Layer-subset filtering is
+specific to small models where the direction doesn't align cleanly.
 
 ### Failure-mode catalog
 
@@ -251,20 +279,24 @@ Templates that did *not* make it worse but didn't beat `echo_en`:
 Under `results/`:
 
 - `results_7B_20260411_restate_echo_en_similar_tweet_en_rewrite.csv.gz` —
-  7B full sweep with 4 templates (310k rows gzipped). Decompress with
+  **Flagship 7B run.** Full sweep with 4 templates (310k rows gzipped),
+  using `max_sim_19_mid` config (all layers). Decompress with
   `gunzip -k results/results_7B_20260411_restate_echo_en_similar_tweet_en_rewrite.csv.gz`
+- `results_3B_20260411_restate_echo_en_similar_tweet_en_rewrite.csv.gz` —
+  **3B L20-30 run.** Full sweep with 4 templates (310k rows gzipped),
+  using the L20-30 filtered config (`max_sim_27_mid_L20-30-pca_0.npy`).
+  rewrite is the best template on 3B (0.4% mean flagged, 360° clean).
 - `template_discovery_7B_round{1,2,3}_mode{0,1}_scores.csv` — per-round
   template × angle degeneration summary statistics (the analysis output of
   `analyze_template_discovery.py`). These small score files justify the
-  `echo_en` winner choice.
+  `echo_en` winner choice on 7B.
 
 **Intentionally not committed** (regeneratable or redundant):
-- Raw template discovery CSVs (~33 MB total) — regenerate with
+- Raw template discovery CSVs (~33 MB each) — regenerate with
   `python run_template_discovery.py --model 7B --round N`
 - `results_7B_20260411.csv` (the echo_en-only run, 39 MB) — redundant with
   the multi-template gzip above (same conditions, different stochastic outputs)
-- The 3B multi-template sweep — template `echo_en` doesn't work on 3B
-  (baseline 14% flagged due to list-expansion lock-in), and the 3B STMT
-  config is `max_norm` instead of `max_sim`, making the steering apples-to-
-  oranges vs. 7B/14B/32B
+- Earlier 3B runs with the wrong configs (`max_norm_35_post` was too weak,
+  `max_sim_27_mid` full-layers destroyed outputs) — the L20-30 run is the
+  correct one
 - All per-round log files

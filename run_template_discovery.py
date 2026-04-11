@@ -30,6 +30,10 @@ from vllm_angular_steering_sentiment import AngularSteering
 MODEL_CONFIGS = {
     "3B": {
         "model_id": "Qwen/Qwen2.5-3B-Instruct",
+        "config": "output/Qwen2.5-3B-Instruct/STMT/steering_config-en-max_sim_27_mid-pca_0.npy",
+    },
+    "3B_max_norm": {
+        "model_id": "Qwen/Qwen2.5-3B-Instruct",
         "config": "output/Qwen2.5-3B-Instruct/STMT/steering_config-en-max_norm_35_post-pca_0.npy",
     },
     "7B": {

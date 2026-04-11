@@ -29,7 +29,11 @@ MODEL_CONFIGS = {
     # Models with existing STMT sentiment configs
     "3B": {
         "model_id": "Qwen/Qwen2.5-3B-Instruct",
-        "config": "steering_config-en-max_norm_35_post-pca_0.npy",
+        # L20-30 layer-subset of max_sim_27_mid. Applying angular steering at
+        # all 36 layers destroys 3B outputs (42-99% degenerate). Restricting
+        # to 11 layers around the peak-cosine layer keeps outputs clean while
+        # still producing real sentiment shifts.
+        "config": "steering_config-en-max_sim_27_mid_L20-30-pca_0.npy",
     },
     "7B": {
         "model_id": "Qwen/Qwen2.5-7B-Instruct",
