@@ -44,6 +44,11 @@ MODEL_CONFIGS = {
         "model_id": "Qwen/Qwen2.5-7B-Instruct",
         "config": "output/Qwen2.5-7B-Instruct/STMT/steering_config-en-max_norm_1_mid-pca_0.npy",
     },
+    "32B": {
+        "model_id": "Qwen/Qwen2.5-32B-Instruct",
+        "config": None,  # auto-detect latest max_sim under output/Qwen2.5-32B-Instruct/STMT
+        "max_model_len": 4096,
+    },
 }
 
 
@@ -95,6 +100,109 @@ TEMPLATES_BY_ROUND = {
         "echo_prefix": (
             "Tweet: '{tweet}'\n\nHere is the same idea rephrased in different "
             "English words:\n"
+        ),
+    },
+    # Round 6: Round 4/5 plateaued at rewrite_en_strict (25.8% mean, 135° clean,
+    # CN@210° still 38%). Try a different attack: combine the strict instruction
+    # with output-prefix priming — force the first generated tokens to be
+    # English-locked phrases. Also test whether putting the constraint AFTER the
+    # tweet vs before makes a difference.
+    6: {
+        "rewrite_en_strict": (
+            "Rewrite this tweet in English only, using different English words. "
+            "Do not use any other language. '{tweet}'\n"
+            "English rewrite:"
+        ),
+        "rewrite_en_strict_the": (
+            "Rewrite this tweet in English only, using different English words. "
+            "Do not use any other language. '{tweet}'\n"
+            "English rewrite: The tweet"
+        ),
+        "rewrite_en_strict_in_english": (
+            "Rewrite this tweet in English only, using different English words. "
+            "Do not use any other language. '{tweet}'\n"
+            "In English, this means:"
+        ),
+        "rewrite_en_strict_quoted": (
+            'Rewrite this tweet in English only, using different English words. '
+            'Do not use any other language. "{tweet}"\n'
+            'English rewrite: "'
+        ),
+        "rewrite_en_constraint_after": (
+            "'{tweet}'\nRewrite this tweet using different English words. "
+            "Use only English. Do not use any other language.\n"
+            "English rewrite:"
+        ),
+        "rewrite_en_strict_imperative": (
+            "Rewrite in English (no other languages allowed): '{tweet}'\n"
+            "English rewrite:"
+        ),
+    },
+    # Round 5: Round 4 found that "Do not use any other language" cuts CN in
+    # the catastrophic zone by ~50%. Push harder on explicit English-only
+    # constraints, persona scaffolding, and direct mentions of "no Chinese".
+    # rewrite_en_strict carried forward as the control.
+    5: {
+        "rewrite_en_strict": (
+            "Rewrite this tweet in English only, using different English words. "
+            "Do not use any other language. '{tweet}'\n"
+            "English rewrite:"
+        ),
+        "rewrite_en_no_cn": (
+            "Rewrite this tweet in English. Do not use Chinese. "
+            "Use only English words: '{tweet}'\n"
+            "English rewrite:"
+        ),
+        "rewrite_en_persona": (
+            "You are an English-speaking writer. Rewrite this tweet using "
+            "different English words: '{tweet}'\n"
+            "English rewrite:"
+        ),
+        "rewrite_en_repeat": (
+            "Rewrite this English tweet using only English words (English only): "
+            "'{tweet}'\n"
+            "English-only rewrite:"
+        ),
+        "rewrite_en_lock_strong": (
+            "Rewrite this tweet in English only, using different English words. "
+            "Do not use Chinese or any other language. '{tweet}'\n"
+            "The rewritten version (in English) is:"
+        ),
+        "rewrite_en_minimal_strict": (
+            "Rewrite in English only (no other languages): '{tweet}'\n"
+            "English rewrite:"
+        ),
+    },
+    # Round 4: 32B CN-leak prevention. R1 winner on 32B is rewrite_en (135°
+    # clean) but the 180°-240° zone has 60-95% Chinese-character leakage.
+    # All variants here keep the rewrite_en spine and try different English
+    # locks: explicit "only English" instruction, English-locking continuation
+    # prefix, repeated mentions of "English", different verbs, simpler vocab.
+    4: {
+        "rewrite_en": (
+            "Rewrite this tweet in English using different words: '{tweet}'\n"
+            "Rewritten tweet (English):"
+        ),
+        "rewrite_en_strict": (
+            "Rewrite this tweet in English only, using different English words. "
+            "Do not use any other language. '{tweet}'\n"
+            "English rewrite:"
+        ),
+        "rewrite_en_continued": (
+            "Rewrite this tweet in English using different words: '{tweet}'\n"
+            "In other English words, this tweet says that"
+        ),
+        "rewrite_en_double": (
+            "Rewrite this English tweet using different English words: '{tweet}'\n"
+            "English rewrite:"
+        ),
+        "rewrite_en_simple": (
+            "Rewrite this tweet using simple, common English words: '{tweet}'\n"
+            "Simple English rewrite:"
+        ),
+        "express_en": (
+            "Express this tweet using different English words: '{tweet}'\n"
+            "Expressed in English:"
         ),
     },
     # Round 3: echo_en is the R1 champion at 285°. Try third-person / analytical
@@ -208,6 +316,21 @@ def main():
 
     cfg = MODEL_CONFIGS[args.model]
     config_path = args.config or cfg["config"]
+    if config_path is None:
+        # Auto-detect newest max_sim config in output/<model_name>/STMT
+        model_name = cfg["model_id"].split("/")[-1]
+        stmt_dir = f"output/{model_name}/STMT"
+        if os.path.isdir(stmt_dir):
+            sim_files = sorted(
+                (f for f in os.listdir(stmt_dir) if "max_sim" in f and f.endswith(".npy")),
+                key=lambda f: os.path.getmtime(os.path.join(stmt_dir, f)),
+                reverse=True,
+            )
+            if sim_files:
+                config_path = os.path.join(stmt_dir, sim_files[0])
+                print(f"Auto-detected config: {config_path}")
+        if config_path is None:
+            sys.exit(f"No steering config for {args.model}. Pass --config.")
     if not os.path.exists(config_path):
         sys.exit(f"Steering config not found: {config_path}")
 
@@ -239,11 +362,14 @@ def main():
     print(f"Output: {out_path}")
 
     # Init vLLM
-    llm = LLM(
+    llm_kwargs = dict(
         model=cfg["model_id"],
         enforce_eager=True,
         gpu_memory_utilization=0.90,
     )
+    if "max_model_len" in cfg:
+        llm_kwargs["max_model_len"] = cfg["max_model_len"]
+    llm = LLM(**llm_kwargs)
     sampling_params = SamplingParams(temperature=0, max_tokens=args.max_tokens)
 
     steering = AngularSteering(llm)

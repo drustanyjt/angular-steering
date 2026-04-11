@@ -95,11 +95,17 @@ REWRITE_TEMPLATE = (
     "'{}'\nRewritten tweet:"
 )
 
+REWRITE_EN_TEMPLATE = (
+    "Rewrite this tweet in English using different words: '{}'\n"
+    "Rewritten tweet (English):"
+)
+
 STEERING_TEMPLATES = {
     "restate": RESTATE_TEMPLATE,
     "echo_en": ECHO_EN_TEMPLATE,
     "similar_tweet_en": SIMILAR_TWEET_EN_TEMPLATE,
     "rewrite": REWRITE_TEMPLATE,
+    "rewrite_en": REWRITE_EN_TEMPLATE,
 }
 
 PROMPTED_TEMPLATE = "Rewrite this tweet with a {} tone: '{}'\nRewritten tweet:"
