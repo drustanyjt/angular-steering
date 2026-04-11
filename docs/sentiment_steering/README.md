@@ -17,37 +17,67 @@ this, start here before making changes to sentiment-steering code.
 - Documented a reproducible template-discovery workflow that can be re-run on
   any model for which sentiment directions have been extracted
 
-## Files added in this session
+## Pipeline file layout
 
 ```
-run_template_discovery.py          # iterative template × angle sweep
-analyze_template_discovery.py      # heatmap + clean-range scoring
-run_sentiment_experiment.py        # MODIFIED: now supports --templates CSV list
+sentiment_pipeline.py              # SHARED module: TEMPLATES, MODEL_CONFIGS,
+                                   # load_tsad_tweets, ResultWriter, build_llm,
+                                   # CSV_COLUMNS. One source of truth for
+                                   # everything that used to be duplicated
+                                   # between the two run scripts.
+run_template_discovery.py          # Iterative template × angle sweep on a
+                                   # balanced ~150-tweet subset. Uses rounds
+                                   # (TEMPLATES_BY_ROUND) to organize
+                                   # template candidates across iterations.
+run_sentiment_experiment.py        # Full sweep on 3,071 TSAD tweets with
+                                   # baseline + angular + CAA + prompted
+                                   # per template.
+analyze_template_discovery.py      # Heatmap + clean-range scoring. Handles
+                                   # both canonical and legacy CSV schemas,
+                                   # reads .csv or .csv.gz transparently.
+filter_config_layers.py            # Filter a steering config .npy to keep
+                                   # only a subset of layer modules (needed
+                                   # for 3B — all-layer angular destroys it).
+pytorch_pure/extract_directions_sentiment.py
+                                   # Extracts sentiment directions from a
+                                   # model using 80 positive + 80 negative
+                                   # hardcoded instruction pairs.
 docs/sentiment_steering/README.md  # this file
 ```
 
+**Single CSV schema (canonical):**
+```
+model, tweet_id, original_text, ground_truth,
+method, param_name, param_value, prompt_template, generated_text
+```
+Both `run_sentiment_experiment.py` and `run_template_discovery.py` write
+this schema via `sentiment_pipeline.ResultWriter`. The analyzer auto-detects
+legacy discovery CSVs that use `template`/`angle`/`text` columns, so old
+runs still score.
+
 ## Quick-start recipes
 
-All commands from repo root. Set `VLLM_ALLOW_INSECURE_SERIALIZATION=1`
-(the scripts do this automatically).
+All commands from repo root. Scripts set `VLLM_ALLOW_INSECURE_SERIALIZATION=1`
+automatically. Both experiment scripts import shared constants from
+`sentiment_pipeline.py` (templates, model configs, data loading, CSV writer).
 
 ### 1. Template discovery on a new model
 
-Run a round of candidate templates on a ~150-tweet balanced subset to find
-the widest "clean steering range" (the span of angles where degeneration
-rate stays below 10%):
+Run a round of candidate templates on a balanced 150-tweet subset to find
+the widest "clean steering range" (span of angles where REP+CN+EMPTY < 10%):
 
 ```bash
 python run_template_discovery.py --model 7B --round 1 --adaptive-mode 0
-python analyze_template_discovery.py results/template_discovery_7B_round1_mode0.csv
+python analyze_template_discovery.py \
+    results/template_discovery_7B_<date>_round1_mode0.csv
 ```
 
-Edit `TEMPLATES_BY_ROUND` in `run_template_discovery.py` to define new
-rounds. Each round is a dict of `name -> prompt template string` using
-`{tweet}` as the placeholder. Round 1 has the "standard" 6 candidates; rounds
-2 and 3 in the file are historical iterations (kept for reference).
+Rounds are defined in `TEMPLATES_BY_ROUND` inside `run_template_discovery.py`.
+Base templates live in `sentiment_pipeline.TEMPLATES`; ad-hoc experimental
+variants that only appear in later rounds live inline in `_AD_HOC`.
 
-Iterate by adding Round N+1 with refined candidates and re-running.
+Iterate by adding Round N+1 (historical rounds 1-6 are kept for reference)
+and rerunning.
 
 ### 2. Full sentiment experiment with best templates
 
@@ -59,10 +89,14 @@ python run_sentiment_experiment.py --model 7B \
     --templates restate,echo_en,similar_tweet_en,rewrite
 ```
 
-Output: `results/results_<MODEL>_<DATE>_<template1>_<template2>_..._.csv`.
-Columns: `model, tweet_id, original_text, ground_truth, method, param_name,
-param_value, prompt_template, generated_text`. Prompted sentiment runs once
-(it has its own template); baseline + angular + CAA run once per template.
+Optional flags:
+- `--angular-step 15` → 24 angles instead of 12 (filename gets `_15deg` tag)
+- `--adaptive-mode 1` → only steer when activation aligns with direction
+- `--config path/to/steering.npy` → override the default config
+- `--dry-run` → print row counts without loading the model
+
+Output filename format:
+`results/results_<MODEL>_<DATE>[_<step>deg]_<template1>_<template2>_..._.csv`
 
 Dry-run first to confirm row counts:
 ```bash
@@ -78,10 +112,10 @@ ls output/<ModelName>/STMT/steering_config-en-*max_sim*.npy
 cd pytorch_pure && python extract_directions_sentiment.py --model <HF_model_id>
 cd ..
 
-# 2. Register the model in MODEL_CONFIGS in both:
-#    - run_template_discovery.py
-#    - run_sentiment_experiment.py
-#    Point at the max_sim STMT config by default.
+# 2. Register the model in MODEL_CONFIGS (sentiment_pipeline.py).
+#    Both run scripts read from this single dict. For models that can't
+#    fit at bf16 on the target GPU, add "llm_kwargs": {"quantization": "fp8"}
+#    (or similar) and optionally "max_model_len".
 
 # 3. Run discovery to pick winners for this model:
 python run_template_discovery.py --model <NEW> --round 1
@@ -89,6 +123,20 @@ python run_template_discovery.py --model <NEW> --round 1
 # 4. Full sweep with winners
 python run_sentiment_experiment.py --model <NEW> --templates <best_templates>
 ```
+
+### 4. Analyzing results from any run
+
+```bash
+# Works on template discovery CSVs (balanced subset, 150 tweets)
+python analyze_template_discovery.py results/template_discovery_7B_round1_mode0.csv
+
+# Works on full experiment CSVs (3,071 tweets) — including gzipped
+python analyze_template_discovery.py \
+    results/results_7B_20260412_15deg_restate_echo_en_similar_tweet_en_rewrite.csv.gz
+```
+The analyzer auto-detects the CSV schema and supports `.csv.gz` transparently.
+It prints a heatmap, per-flag breakdown, and a template summary ranked by
+widest circular-contiguous clean angle range.
 
 ## Key findings (with evidence)
 
@@ -222,24 +270,26 @@ you want to append. The script now prints a warning if the output file exists.
 
 ### Auto-detect config prefers max_sim
 
-`run_sentiment_experiment.py` has auto-detect logic that prefers
-`max_sim` over `max_norm` when multiple configs exist in the STMT directory.
-Override with `--config <path>` if you need a specific file.
+`sentiment_pipeline.resolve_config_path` prefers the newest `max_sim`
+config in `output/<model_name>/STMT/` when `MODEL_CONFIGS[key]["config"]`
+is None. Override with `--config <path>` if you need a specific file.
 
 ## Available templates in the steering scripts
 
-Defined in `STEERING_TEMPLATES` in `run_sentiment_experiment.py`:
+Defined in `sentiment_pipeline.TEMPLATES` (single source of truth):
 
 | Name | Template |
 |---|---|
-| `restate` | `Analyze the situation described in this tweet and restate the core event in a single sentence: '{}'\nSingle sentence summary:` |
-| `echo_en` | `Tweet: '{}'\nThe same thing expressed in different English words:` |
-| `similar_tweet_en` | `Write a similar tweet in English about the same topic: '{}'\nSimilar tweet:` |
-| `rewrite` | `Rewrite this tweet to say the same thing in different words: '{}'\nRewritten tweet:` |
+| `restate` | `Analyze the situation described in this tweet and restate the core event in a single sentence: '{tweet}'\nSingle sentence summary:` |
+| `rewrite` | `Rewrite this tweet to say the same thing in different words: '{tweet}'\nRewritten tweet:` |
+| `rewrite_en` | `Rewrite this tweet in English using different words: '{tweet}'\nRewritten tweet (English):` |
+| `paraphrase_en` | `Paraphrase this tweet in English: '{tweet}'\nParaphrase:` |
+| `similar_tweet_en` | `Write a similar tweet in English about the same topic: '{tweet}'\nSimilar tweet:` |
+| `echo_en` | `Tweet: '{tweet}'\nThe same thing expressed in different English words:` |
 
-To add a new template: update `STEERING_TEMPLATES` in
-`run_sentiment_experiment.py` (add it to `TEMPLATES_BY_ROUND` in
-`run_template_discovery.py` for discovery).
+To add a new persistent template, edit `sentiment_pipeline.TEMPLATES`.
+One-off experimental variants that are only used for a specific discovery
+round live in `_AD_HOC` inside `run_template_discovery.py`.
 
 ## Anti-patterns (things that made things worse)
 
@@ -278,25 +328,33 @@ Templates that did *not* make it worse but didn't beat `echo_en`:
 
 Under `results/`:
 
+- `results_7B_20260412_15deg_restate_echo_en_similar_tweet_en_rewrite.csv.gz`
+  — **Flagship 7B run at 15° granularity.** 24 angles × 4 templates + CAA +
+  prompted, 457k rows gzipped (~55 MB). Uses `max_sim_19_mid` config
+  (all layers).
+- `results_3B_20260412_15deg_restate_echo_en_similar_tweet_en_rewrite.csv.gz`
+  — **Flagship 3B run at 15° granularity.** Same structure as 7B, 457k rows
+  gzipped (~51 MB). Uses the L20-30 filtered config
+  (`max_sim_27_mid_L20-30-pca_0.npy`). `rewrite` is the best template on 3B
+  (0.4% mean flagged, 360° clean at 30° granularity).
 - `results_7B_20260411_restate_echo_en_similar_tweet_en_rewrite.csv.gz` —
-  **Flagship 7B run.** Full sweep with 4 templates (310k rows gzipped),
-  using `max_sim_19_mid` config (all layers). Decompress with
-  `gunzip -k results/results_7B_20260411_restate_echo_en_similar_tweet_en_rewrite.csv.gz`
+  prior 30°-granularity 7B sweep (12 angles). Kept for completeness.
 - `results_3B_20260411_restate_echo_en_similar_tweet_en_rewrite.csv.gz` —
-  **3B L20-30 run.** Full sweep with 4 templates (310k rows gzipped),
-  using the L20-30 filtered config (`max_sim_27_mid_L20-30-pca_0.npy`).
-  rewrite is the best template on 3B (0.4% mean flagged, 360° clean).
-- `template_discovery_7B_round{1,2,3}_mode{0,1}_scores.csv` — per-round
-  template × angle degeneration summary statistics (the analysis output of
-  `analyze_template_discovery.py`). These small score files justify the
-  `echo_en` winner choice on 7B.
+  prior 30°-granularity 3B sweep.
+- `results_32B_20260411_rewrite_en_similar_tweet_en.csv.gz` — 32B sweep
+  with the two best templates from 32B discovery (rewrite_en, similar_tweet_en).
+- `template_discovery_{7B,32B}_round*_mode0_scores.csv` — per-round template ×
+  angle primary-flag summary statistics. These small score files justify
+  the template winners.
+
+Decompress any of the above with `gunzip -k <file>.gz`. The analyzer reads
+`.csv.gz` directly, so you don't need to decompress for analysis.
 
 **Intentionally not committed** (regeneratable or redundant):
 - Raw template discovery CSVs (~33 MB each) — regenerate with
-  `python run_template_discovery.py --model 7B --round N`
+  `python run_template_discovery.py --model <key> --round N`
 - `results_7B_20260411.csv` (the echo_en-only run, 39 MB) — redundant with
   the multi-template gzip above (same conditions, different stochastic outputs)
-- Earlier 3B runs with the wrong configs (`max_norm_35_post` was too weak,
-  `max_sim_27_mid` full-layers destroyed outputs) — the L20-30 run is the
-  correct one
-- All per-round log files
+- Earlier 3B runs with the wrong configs (`max_norm_35_post` too weak,
+  `max_sim_27_mid` full-layers destroyed outputs)
+- Per-round log files
