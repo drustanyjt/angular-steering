@@ -233,8 +233,9 @@ def main():
     os.environ["VLLM_ALLOW_INSECURE_SERIALIZATION"] = "1"
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     date_str = datetime.now().strftime("%Y%m%d")
+    step_tag = f"_{args.angular_step}deg" if args.angular_step != 30 else ""
     suffix = f"_{'_'.join(template_names)}" if len(template_names) > 1 else ""
-    out_path = f"{args.output_dir}/results_{args.model}_{date_str}{suffix}.csv"
+    out_path = f"{args.output_dir}/results_{args.model}_{date_str}{step_tag}{suffix}.csv"
     if Path(out_path).exists():
         print(f"WARNING: {out_path} exists, will append. Delete first for a clean run.")
     writer = ResultWriter(out_path)
