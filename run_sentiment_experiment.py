@@ -77,6 +77,27 @@ RESTATE_TEMPLATE = (
     "Single sentence summary:"
 )
 
+ECHO_EN_TEMPLATE = (
+    "Tweet: '{}'\nThe same thing expressed in different English words:"
+)
+
+SIMILAR_TWEET_EN_TEMPLATE = (
+    "Write a similar tweet in English about the same topic: '{}'\n"
+    "Similar tweet:"
+)
+
+REWRITE_TEMPLATE = (
+    "Rewrite this tweet to say the same thing in different words: "
+    "'{}'\nRewritten tweet:"
+)
+
+STEERING_TEMPLATES = {
+    "restate": RESTATE_TEMPLATE,
+    "echo_en": ECHO_EN_TEMPLATE,
+    "similar_tweet_en": SIMILAR_TWEET_EN_TEMPLATE,
+    "rewrite": REWRITE_TEMPLATE,
+}
+
 PROMPTED_TEMPLATE = "Rewrite this tweet with a {} tone: '{}'\nRewritten tweet:"
 
 # ---------------------------------------------------------------------------
@@ -143,8 +164,17 @@ def main():
     parser.add_argument("--angular-step", type=int, default=30)
     parser.add_argument("--max-tokens", type=int, default=80)
     parser.add_argument("--config", type=str, default=None, help="Path to steering config .npy file (overrides auto-detect)")
+    parser.add_argument("--templates", type=str, default="echo_en",
+                        help="Comma-separated list of prompt templates for angular/CAA conditions "
+                             f"(options: {','.join(STEERING_TEMPLATES.keys())})")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+
+    template_names = [t.strip() for t in args.templates.split(",") if t.strip()]
+    for tn in template_names:
+        if tn not in STEERING_TEMPLATES:
+            sys.exit(f"Unknown template: {tn}. Options: {list(STEERING_TEMPLATES.keys())}")
+    print(f"Using steering templates: {template_names}")
 
     cfg = MODEL_CONFIGS[args.model]
     model_id = cfg["model_id"]
@@ -170,7 +200,8 @@ def main():
         print(f"Auto-detected config: {config_path}")
 
     angular_angles = list(range(0, 360, args.angular_step))
-    total_conditions = 1 + len(angular_angles) + len(CAA_ALPHAS) + len(PROMPTED_SENTIMENTS)
+    per_template_conditions = 1 + len(angular_angles) + len(CAA_ALPHAS)
+    total_conditions = per_template_conditions * len(template_names) + len(PROMPTED_SENTIMENTS)
 
     # Load tweets
     tweets = load_all_tsad_tweets(args.tsad_path)
@@ -178,7 +209,10 @@ def main():
     print(f"  Positive: {sum(1 for t in tweets if t['ground_truth'] == 'positive')}")
     print(f"  Negative: {sum(1 for t in tweets if t['ground_truth'] == 'negative')}")
     print(f"  Neutral:  {sum(1 for t in tweets if t['ground_truth'] == 'neutral')}")
-    print(f"Conditions: {total_conditions} ({len(angular_angles)} angular + {len(CAA_ALPHAS)} CAA + {len(PROMPTED_SENTIMENTS)} prompted + 1 baseline)")
+    print(f"Per-template conditions: {per_template_conditions} "
+          f"({len(angular_angles)} angular + {len(CAA_ALPHAS)} CAA + 1 baseline)")
+    print(f"Total conditions: {total_conditions} "
+          f"({per_template_conditions} × {len(template_names)} templates + {len(PROMPTED_SENTIMENTS)} prompted)")
     print(f"Total rows: {total_conditions * len(tweets):,}")
 
     if args.dry_run:
@@ -189,7 +223,10 @@ def main():
     os.environ["VLLM_ALLOW_INSECURE_SERIALIZATION"] = "1"
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     date_str = datetime.now().strftime("%Y%m%d")
-    out_path = f"{args.output_dir}/results_{args.model}_{date_str}.csv"
+    suffix = f"_{'_'.join(template_names)}" if len(template_names) > 1 else ""
+    out_path = f"{args.output_dir}/results_{args.model}_{date_str}{suffix}.csv"
+    if Path(out_path).exists():
+        print(f"WARNING: {out_path} exists, will append. Delete first for a clean run.")
     writer = ResultWriter(out_path)
 
     # Load model
@@ -201,42 +238,45 @@ def main():
     llm = LLM(**llm_kwargs)
     sampling_params = SamplingParams(temperature=0, max_tokens=args.max_tokens)
 
-    # Build restate prompts
-    restate_prompts = [RESTATE_TEMPLATE.format(t["text"]) for t in tweets]
-
     # Load steering config
     steering = AngularSteering(llm)
     steering.load_config_from_file(config_path)
 
     pbar = tqdm(total=total_conditions, desc="Conditions")
 
-    # 1. Baseline
-    print("\n--- Baseline ---")
-    outputs = llm.generate(restate_prompts, sampling_params)
-    writer.write_batch(model_name, tweets, "baseline", "none", "0", "restate", outputs)
-    pbar.update(1)
+    # Baseline + angular + CAA run per template
+    for template_name in template_names:
+        steering_template = STEERING_TEMPLATES[template_name]
+        steering_prompts = [steering_template.format(t["text"]) for t in tweets]
+        print(f"\n### Template: {template_name} ###")
 
-    # 2. Angular steering
-    print("\n--- Angular Steering ---")
-    steering.apply_steering(target_degree=angular_angles[0], adaptive_mode=0, steering_method="angular")
-    for angle in angular_angles:
-        steering.set_degree(angle)
-        outputs = llm.generate(restate_prompts, sampling_params)
-        writer.write_batch(model_name, tweets, "angular", "angle", str(angle), "restate", outputs)
+        # Baseline
+        print("--- Baseline ---")
+        outputs = llm.generate(steering_prompts, sampling_params)
+        writer.write_batch(model_name, tweets, "baseline", "none", "0", template_name, outputs)
         pbar.update(1)
-    steering.remove_steering()
 
-    # 3. CAA
-    print("\n--- CAA ---")
-    steering.apply_steering(target_degree=CAA_ALPHAS[0], adaptive_mode=0, steering_method="caa")
-    for alpha in CAA_ALPHAS:
-        steering.set_degree(alpha)
-        outputs = llm.generate(restate_prompts, sampling_params)
-        writer.write_batch(model_name, tweets, "caa", "alpha", str(alpha), "restate", outputs)
-        pbar.update(1)
-    steering.remove_steering()
+        # Angular steering
+        print("--- Angular Steering ---")
+        steering.apply_steering(target_degree=angular_angles[0], adaptive_mode=0, steering_method="angular")
+        for angle in angular_angles:
+            steering.set_degree(angle)
+            outputs = llm.generate(steering_prompts, sampling_params)
+            writer.write_batch(model_name, tweets, "angular", "angle", str(angle), template_name, outputs)
+            pbar.update(1)
+        steering.remove_steering()
 
-    # 4. Prompted sentiment
+        # CAA
+        print("--- CAA ---")
+        steering.apply_steering(target_degree=CAA_ALPHAS[0], adaptive_mode=0, steering_method="caa")
+        for alpha in CAA_ALPHAS:
+            steering.set_degree(alpha)
+            outputs = llm.generate(steering_prompts, sampling_params)
+            writer.write_batch(model_name, tweets, "caa", "alpha", str(alpha), template_name, outputs)
+            pbar.update(1)
+        steering.remove_steering()
+
+    # Prompted sentiment (uses its own template, runs once)
     print("\n--- Prompted Sentiment ---")
     for label, description in PROMPTED_SENTIMENTS:
         prompted_prompts = [PROMPTED_TEMPLATE.format(description, t["text"]) for t in tweets]
