@@ -246,16 +246,25 @@ Templates that did *not* make it worse but didn't beat `echo_en`:
 5. **Compare adaptive modes per template** — mode 0 beat mode 1 for `echo_en`
    but this isn't guaranteed for other templates.
 
-## Result CSVs produced in this session
+## Result CSVs in the repo
 
 Under `results/`:
 
-- `template_discovery_7B_round1_mode0.csv` — 6 templates, 24 angles, 150 tweets
-- `template_discovery_7B_round1_mode1.csv` — adaptive mode test on 3 templates
-- `template_discovery_7B_round2_mode0.csv` — list-loop prevention variants
-- `template_discovery_7B_round3_mode0.csv` — third-person / few-shot variants
-- `results_7B_20260411.csv` — 7B full sweep with `echo_en` only (89k rows)
-- `results_7B_20260411_restate_echo_en_similar_tweet_en_rewrite.csv` —
-  7B full sweep with 4 templates (310k rows)
-- `results_3B_20260411_restate_echo_en_similar_tweet_en_rewrite.csv` —
-  3B full sweep with 4 templates (310k rows, uses max_norm config — see Gotchas)
+- `results_7B_20260411_restate_echo_en_similar_tweet_en_rewrite.csv.gz` —
+  7B full sweep with 4 templates (310k rows gzipped). Decompress with
+  `gunzip -k results/results_7B_20260411_restate_echo_en_similar_tweet_en_rewrite.csv.gz`
+- `template_discovery_7B_round{1,2,3}_mode{0,1}_scores.csv` — per-round
+  template × angle degeneration summary statistics (the analysis output of
+  `analyze_template_discovery.py`). These small score files justify the
+  `echo_en` winner choice.
+
+**Intentionally not committed** (regeneratable or redundant):
+- Raw template discovery CSVs (~33 MB total) — regenerate with
+  `python run_template_discovery.py --model 7B --round N`
+- `results_7B_20260411.csv` (the echo_en-only run, 39 MB) — redundant with
+  the multi-template gzip above (same conditions, different stochastic outputs)
+- The 3B multi-template sweep — template `echo_en` doesn't work on 3B
+  (baseline 14% flagged due to list-expansion lock-in), and the 3B STMT
+  config is `max_norm` instead of `max_sim`, making the steering apples-to-
+  oranges vs. 7B/14B/32B
+- All per-round log files
