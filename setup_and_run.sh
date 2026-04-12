@@ -1,24 +1,42 @@
 #!/bin/bash
 # Setup and run sentiment steering experiment on a fresh server.
-# Usage: bash setup_and_run.sh [MODEL_KEY]
-# Example: bash setup_and_run.sh 14B
+#
+# Usage:
+#   bash setup_and_run.sh [MODEL_KEY] [TEMPLATES] [ANGULAR_STEP]
+#
+# Examples:
+#   bash setup_and_run.sh 14B
+#   bash setup_and_run.sh 14B restate,echo_en,similar_tweet_en,rewrite 15
+#   bash setup_and_run.sh 32B rewrite_en,echo_en 15
+#
+# Defaults: TEMPLATES=restate,echo_en,similar_tweet_en,rewrite, ANGULAR_STEP=15
 #
 # Steps:
 #   1. Install dependencies
-#   2. Extract sentiment directions for models that don't have them
-#   3. Run the experiment
+#   2. Extract sentiment directions (both max_sim and max_norm) if missing
+#   3. Run the full sentiment experiment
 #
-# Prerequisites: CUDA GPU, git clone of this repo already done
+# Prerequisites: CUDA GPU with enough VRAM for the chosen model in bf16,
+# git clone of this repo already done.
+#
+# H100-sized GPU notes:
+#   - 14B bf16 needs ~28 GB. An H100 (80 GB) easily fits it.
+#   - 32B bf16 needs ~64 GB. Still fits on H100.
+#   - Use --angular-step 15 for fine-grained sweeps (24 angles, ~2x runtime).
 
 set -e
 
 MODEL_KEY="${1:-14B}"
+TEMPLATES="${2:-restate,echo_en,similar_tweet_en,rewrite}"
+ANGULAR_STEP="${3:-15}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "============================================"
 echo "  Sentiment Steering Experiment Setup"
-echo "  Model: $MODEL_KEY"
+echo "  Model:         $MODEL_KEY"
+echo "  Templates:     $TEMPLATES"
+echo "  Angular step:  ${ANGULAR_STEP}° (=$((360 / ANGULAR_STEP)) angles)"
 echo "============================================"
 
 # ---------------------------------------------------------------------------
@@ -82,7 +100,11 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- Running experiment ---"
-python run_sentiment_experiment.py --model "$MODEL_KEY" --output-dir results/
+python run_sentiment_experiment.py \
+    --model "$MODEL_KEY" \
+    --templates "$TEMPLATES" \
+    --angular-step "$ANGULAR_STEP" \
+    --output-dir results/
 
 echo ""
 echo "============================================"

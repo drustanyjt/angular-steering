@@ -4,6 +4,23 @@ Session notes for transferring working knowledge to a new environment (e.g.,
 a machine with larger GPUs). If you are a fresh Claude Code session reading
 this, start here before making changes to sentiment-steering code.
 
+## TL;DR for H100 handoff
+
+We have clean flagship runs on 7B and 3B with angular steering. 14B and 32B
+are the next targets. **14B fp8 attempts on a 24 GB GPU were inconclusive**
+(see dedicated section below) — re-run them on H100 with bf16 to get a
+definitive answer.
+
+Start with:
+```bash
+bash setup_and_run.sh 14B restate,echo_en,similar_tweet_en,rewrite 15
+bash setup_and_run.sh 32B rewrite_en,echo_en,similar_tweet_en,rewrite 15
+```
+
+(The 32B template set swaps `restate` for `rewrite_en` because prior 32B
+discovery showed `restate` has the same catastrophic 270° failure as on 14B
+while `rewrite_en` cut Chinese-character leakage significantly.)
+
 ## What this session accomplished
 
 - Built an iterative template-discovery pipeline for sentiment angular steering
@@ -308,21 +325,98 @@ Templates that did *not* make it worse but didn't beat `echo_en`:
 `echo_quoted` (270° clean, but trades 150° for 180°), `echo_rephrased` (240°),
 `echo_is` (240°), `echo_brief` (240°).
 
-## Next steps if you want to push further
+## 14B fp8 — inconclusive findings (handoff for H100)
 
-1. **Fix 3B by extracting max_sim sentiment directions** (see Gotchas).
-2. **Try the full sweep on 14B/32B with `echo_en`** — this should dramatically
-   improve over the original `restate` runs (14B restate peaked at 72% flagged
-   at 270°; `echo_en` on 7B was 3%). The prior 14B/32B result CSVs are in
-   `results/results_14B_20260405.csv` and `results/results_32B_20260405.csv`
-   for comparison.
-3. **Investigate the 120°–150° zone structurally** — measure activation norms
+Attempted on a 24 GB GPU with `--model 14B_fp8` (vLLM dynamic FP8). **No
+configuration gave both clean outputs AND meaningful sentiment flips
+simultaneously**, so these results are *not* the flagship-quality data the
+7B and 3B runs produced. Reopen this on an H100 and re-run with the full
+bf16 model to get a clean answer.
+
+### What I tried (all on Qwen2.5-14B-Instruct fp8, 150 curated tweets)
+
+| Config | Layers | Clean | Sentiment flips (0°→180°) |
+|---|---|---|---|
+| max_sim_36_mid FULL | 48 | 120° | 1-4 / 150 (weak) |
+| max_sim_36_mid_L31-41 | 11 | 360° | 1-3 / 150 (almost zero) |
+| max_sim_36_mid_L26-46 | 21 | 360° | 1-3 / 150 |
+| max_sim_36_mid_L20-47 | 28 | 360° | 1-4 / 150 |
+| max_norm_33_post FULL | 48 | 45° (old metric) / ~135° (strict) | **27-30 / 150 (strong)** |
+| max_norm_33_post_L28-38 | 11 | 360° | 0-4 / 150 |
+| max_norm_33_post_L20-46 | 27 | 360° | 3-7 / 150 |
+
+### The key diagnostic finding: the REP detector was over-flagging
+
+My initial "flag rate" metric (3-gram repeats ≥4 times) counted
+*successful enthusiastic outputs* as failures. For example, the 14B fp8
+max_norm-FULL outputs at 300°-315° looked like:
+> "How cool and classy! How amazing! How wonderful! #Amazing #Incredible #Legendary"
+
+These are **successful sentiment-steered outputs** (positive
+exaggeration) that triggered REP because of the `"How X!"` adjective
+stack. A strict metric (trigram ≥6 repeats, OR single token dominates
+≥35% of the output) correctly separates these from genuine pathology.
+
+**Revised clean range for 14B fp8 max_norm FULL** under the strict metric:
+~135° of usable data (30°-120° contiguous plus 180°-210°), with 225°-315°
+as a real ~90° dead zone of actual REP loops. The analyzer should use
+the strict metric going forward.
+
+### Sentiment asymmetry on 14B
+
+- **POS→NEG at 180° works cleanly** — 2% flagged, and the model
+  reinterprets positive tweets as distress/empathy responses. E.g.
+  "Phase 2 was a success" → "I know it's hard to stay positive when you're
+  facing challenges, but you're not alone." This is coherent negative-
+  valenced text and would count as a successful negative steer.
+- **NEG→POS at 0° fails** — negative tweets produce hashtag soup:
+  "pff, Life sucks sometimes!" → "#it'sawesome #indeed #nottobemore
+  #thanmeresentment..." The model can't coherently generate positive
+  text anchored to a negative input.
+
+This asymmetry matches the instruction-tuning bias we observed on 7B/14B:
+models handle "push positive toward negative" more gracefully than the
+reverse.
+
+### Recommended next experiments on H100
+
+1. **Run both 14B and 32B unquantized** at `--angular-step 15`:
+   ```bash
+   bash setup_and_run.sh 14B
+   bash setup_and_run.sh 32B
+   ```
+   (setup_and_run.sh defaults to `restate,echo_en,similar_tweet_en,rewrite`
+   templates at 15° step.) Expected runtime on H100: 14B ~2h, 32B ~4h.
+
+2. **Determine whether fp8 was the problem.** If 14B bf16 produces the
+   same "no middle ground" pattern as fp8, then it's an intrinsic scale
+   property, not a quantization artifact. If bf16 gives clean outputs
+   with meaningful flips at the default config, report that FP8 should
+   be avoided for angular steering.
+
+3. **If 14B/32B still need layer-subset filtering**, use
+   `filter_config_layers.py` with a middle range like L_peak ± 10. Peak
+   layers: 14B max_sim=36, 14B max_norm=33; 32B auto-detects (check log).
+
+4. **Update the analyzer's strict metric** (task carried over) so
+   existing result CSVs get cleaner scores:
+   - `analyze_template_discovery.py`: require 3-gram repeat ≥6 (not ≥4),
+     add single-token dominance check (top token ≥35% of words).
+   - This will retroactively show that earlier runs had lower real
+     degeneration than reported.
+
+## Open questions / future work
+
+1. **Investigate the 120°–150° zone structurally** — measure activation norms
    and cosine similarity between rotated activations and the training
    distribution. This is the only failure pattern prompting hasn't fixed.
-4. **Template ensemble** — route tweets through different templates depending
+2. **Template ensemble** — route tweets through different templates depending
    on the target angle. Unexplored.
-5. **Compare adaptive modes per template** — mode 0 beat mode 1 for `echo_en`
+3. **Compare adaptive modes per template** — mode 0 beat mode 1 for `echo_en`
    but this isn't guaranteed for other templates.
+4. **Re-extract 14B/32B sentiment directions from more than 80 prompts**
+   if the direction turns out to be weak. The extraction script uses a
+   fixed 100-statement hardcoded list per sentiment.
 
 ## Result CSVs in the repo
 
