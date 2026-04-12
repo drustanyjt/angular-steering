@@ -36,25 +36,51 @@ the generated text. Templates without emotion-related language (like
 | similar_tweet_en (R1 baseline) | 19 (13%) | 9 (6%) | 28 | 255° |
 | rewrite (cleanest) | — | 2 (1.3%) | — | 360° |
 
-### Recommended H100 commands
+### H100 bf16 results (2026-04-12)
 
-Include `similar_equivalent_en` alongside existing templates:
+14B and 32B were run unquantized on H100 80 GB. **FP8 was the problem** —
+bf16 14B produces coherent sentiment flips at 0° and 180° while fp8 only
+managed 1-4/150. Avoid FP8 for angular steering.
+
+| Model | Config | Best template | Clean range | Mean flag% |
+|-------|--------|---------------|-------------|------------|
+| 14B bf16 | max_sim_36_mid (all) | rewrite_en | 135° | 18.7% |
+| 32B bf16 | max_sim_47_mid (all) | rewrite_en | 135° | 32.0% |
+
+135° is the intrinsic ceiling for ≥14B models — both hit it independently.
+Layer-subset filtering is NOT needed at bf16 (unlike 3B). The failure modes
+are phase-shifted between models: 14B has REP at 225°-345° + CN at
+105°-165°; 32B has REP at 30°-165° + CN at 165°-270°.
+
+Emotion-framing templates (R9-R12) work on 14B/32B too — `similar_reaction_en`
+got 38-55 flips/150, `similar_equivalent_en` got 38-40 flips/150. Clean
+ranges stay at 135-150° regardless of template.
+
+**90° neutralization is real.** At 90° steering, negative tweets get softened
+("Life sucks" → "life can be challenging") and positive tweets get toned down
+("was a success" → "went well"). The effect is subtle but consistent across
+templates, and distinct from unsteered baseline. `rewrite_en` shows the
+cleanest gradual neutralization; `similar_tweet_en` sometimes overshoots to
+positive. A proper sentiment classifier (not the current word-count method)
+is needed to quantify this — the crude scorer undercounts real shifts.
+
+### Current sweep (in progress)
+
+Five templates for cross-comparison on 14B and 32B bf16:
 
 ```bash
-bash setup_and_run.sh 14B similar_equivalent_en,rewrite_en,similar_tweet_en,rewrite 15
-bash setup_and_run.sh 32B similar_equivalent_en,rewrite_en,similar_tweet_en,rewrite 15
+python run_sentiment_experiment.py --model 14B \
+    --templates rewrite_en,similar_tweet_en,rewrite,similar_equivalent_en,echo_en \
+    --angular-step 15
+python run_sentiment_experiment.py --model 32B \
+    --templates rewrite_en,similar_tweet_en,rewrite,similar_equivalent_en,echo_en \
+    --angular-step 15
 ```
 
-Also run template discovery on 14B/32B unquantized to see if the template
-winners change at bf16 scale:
-
-```bash
-python run_template_discovery.py --model 14B --round 9
-python run_template_discovery.py --model 32B --round 9
-```
-
-(Round 9 contains the emotion-flavoured variants that found
-similar_reaction_en as the breakthrough template.)
+This set tests: clean paraphrase templates (rewrite_en, rewrite, echo_en)
+vs emotion-framing (similar_equivalent_en) vs cross-model baseline
+(similar_tweet_en). Goal: determine whether 90° steering genuinely
+neutralizes sentiment across templates.
 
 ## What this session accomplished
 
@@ -457,16 +483,19 @@ reverse.
 
 ## Open questions / future work
 
-1. **Investigate the 120°–150° zone structurally** — measure activation norms
-   and cosine similarity between rotated activations and the training
-   distribution. This is the only failure pattern prompting hasn't fixed.
-2. **Template ensemble** — route tweets through different templates depending
-   on the target angle. Unexplored.
-3. **Compare adaptive modes per template** — mode 0 beat mode 1 for `echo_en`
-   but this isn't guaranteed for other templates.
-4. **Re-extract 14B/32B sentiment directions from more than 80 prompts**
-   if the direction turns out to be weak. The extraction script uses a
-   fixed 100-statement hardcoded list per sentiment.
+1. **Quantify 90° neutralization properly** — the word-count sentiment
+   scorer misses subtle shifts ("life can be challenging" scores as neutral,
+   not detected as a shift from "life sucks"). A transformer-based
+   sentiment classifier on the generated tweets would give real numbers.
+2. **Why does clean range plateau at 135° for ≥14B?** Both 14B and 32B
+   hit this ceiling with different failure topologies. Possibly
+   instruction tuning creates sharper mode boundaries at larger scales.
+3. **Why are 14B/32B failure zones phase-shifted?** 14B has REP at
+   225°-345° and CN at 105°-165°; 32B has these zones rotated ~180°.
+4. **Template ensemble** — route tweets through different templates
+   depending on the target angle. Unexplored.
+5. **max_norm comparison at bf16** — fp8 max_norm had stronger sentiment
+   flips (27-30/150) despite narrower clean range. bf16 max_norm untested.
 
 ## Result CSVs in the repo
 
@@ -485,7 +514,14 @@ Under `results/`:
   prior 30°-granularity 7B sweep (12 angles). Kept for completeness.
 - `results_3B_20260411_restate_echo_en_similar_tweet_en_rewrite.csv.gz` —
   prior 30°-granularity 3B sweep.
-- `results_32B_20260411_rewrite_en_similar_tweet_en.csv.gz` — 32B sweep
+- `results_14B_20260412_15deg_rewrite_en_similar_tweet_en_echo_en_rewrite.csv.gz`
+  — **14B bf16 H100 run at 15° granularity.** 4 templates, 457k rows (~58 MB).
+  Uses `max_sim_36_mid` config (all layers). `rewrite_en` best at 135° clean.
+- `results_32B_20260412_15deg_rewrite_en_similar_tweet_en_echo_en_rewrite.csv.gz`
+  — **32B bf16 H100 run at 15° granularity.** Same structure (~58 MB).
+  Uses `max_sim_47_mid` config (all layers). `rewrite_en` and
+  `similar_tweet_en` tied at 135° clean.
+- `results_32B_20260411_rewrite_en_similar_tweet_en.csv.gz` — prior 32B sweep
   with the two best templates from 32B discovery (rewrite_en, similar_tweet_en).
 - `template_discovery_{7B,32B}_round*_mode0_scores.csv` — per-round template ×
   angle primary-flag summary statistics. These small score files justify
