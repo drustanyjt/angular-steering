@@ -10,7 +10,7 @@
 - **Conditions:** 185 (36 per template x 5 templates + 5 prompted)
 - **Total rows:** 568,135
 - **Runtime:** ~190 min on H100 (~62s/condition)
-- **Status:** In progress
+- **Runtime:** ~175 min on H100
 
 ## Templates used
 
@@ -31,15 +31,27 @@ Same five templates as the 14B experiment for direct cross-scale comparison.
 - **Emotion templates have scale-specific winners:** On 32B discovery, `similar_matching_en` got 77/150 flips (51%) vs `similar_equivalent_en`'s 38 (25%). But `similar_equivalent_en` is the most consistent across all four model sizes.
 - **135° clean range ceiling holds on 32B** regardless of template choice.
 
-## Expected results (based on 4-template prior sweep)
+## Results summary (strict REP metric)
 
-| Template | Expected clean range | Notes |
-|---|---|---|
-| rewrite_en | 135° | Best by mean flag% |
-| similar_tweet_en | 135° | Tied with rewrite_en |
-| similar_equivalent_en | ~135° | Should show higher flip rate |
-| rewrite | 105° | Higher CN leakage than rewrite_en |
-| echo_en | 105° | Worst coherency on larger models |
+| Template | Clean range | Flips/3071 | Flip% | Mean delta |
+|---|---|---|---|---|
+| similar_equivalent_en | 135° | 930 | 30% | -1.91 |
+| similar_tweet_en | 135° | 569 | 19% | -1.34 |
+| rewrite_en | 150° | 446 | 15% | -1.07 |
+| echo_en | 120° | 360 | 12% | -0.87 |
+| rewrite | 150° | 86 | 3% | -1.07 |
+
+`similar_equivalent_en` dominates with 930 flips (30%) — 63% more than the
+next best (`similar_tweet_en` at 569). The emotion framing effect is even
+stronger on 32B than on 14B (930 vs 862 flips). `rewrite` nearly suppresses
+sentiment flips entirely (3%) despite having 150° clean range — confirming
+that paraphrase-only templates absorb steering silently.
+
+## Failure modes
+
+- **CN (Chinese characters):** Dominant at 165°-270°. Up to 99% for `rewrite` at 195°. `rewrite_en` cuts this substantially but still peaks at 98% at 225°.
+- **REP (repetition):** Dominant at 30°-165°. Up to 93% for `echo_en` at 90°.
+- **Meta-explanation:** Similar to 14B — model drops into instruction mode at 180°.
 
 ## Command used
 
