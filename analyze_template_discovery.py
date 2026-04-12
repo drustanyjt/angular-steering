@@ -29,8 +29,19 @@ CHINESE_RE = re.compile(r"[\u4e00-\u9fff]")
 WORD_RE = re.compile(r"\w+")
 
 
-def flags_for(text):
-    """Return (primary_flags, secondary_flags) sets for a generated text."""
+def flags_for(text, strict=False):
+    """
+    Return (primary_flags, secondary_flags) sets for a generated text.
+
+    strict=False (default, legacy): any 3-gram repeating >=4 times fires REP.
+        Over-flags successful enthusiastic outputs like "How amazing! How
+        wonderful! How incredible!" because the "How X!" pattern repeats.
+
+    strict=True: REP requires either (a) a 3-gram repeating >=6 times, OR
+        (b) a single token accounting for >=35% of all tokens (catches
+        "I, I, I, I, I, ..." loops even when trigrams aren't uniform).
+        Correctly separates pathology from strong sentiment-steered text.
+    """
     primary = set()
     secondary = set()
     if len(text.strip()) < 10:
@@ -42,8 +53,14 @@ def flags_for(text):
         trigrams = [" ".join(words[i:i + 3]) for i in range(len(words) - 2)]
         if trigrams:
             top_count = Counter(trigrams).most_common(1)[0][1]
-            if top_count >= 4:
+            rep_threshold = 6 if strict else 4
+            if top_count >= rep_threshold:
                 primary.add("REP")
+        if strict:
+            wc = Counter(words)
+            top_word, top_n = wc.most_common(1)[0]
+            if top_n >= 12 and top_n / len(words) > 0.35:
+                primary.add("DOM")
         uniq_ratio = len(set(words)) / len(words)
         if uniq_ratio < 0.3:
             secondary.add("LOW_DIV")
@@ -113,21 +130,32 @@ def main():
                         help="print flagged example outputs per template")
     parser.add_argument("--no-jaccard", action="store_true",
                         help="skip Jaccard OFFTOPIC computation (faster)")
+    parser.add_argument("--strict", action="store_true",
+                        help="use strict REP detection (3-gram >=6 repeats, "
+                             "or single-token >=35%% dominance) — "
+                             "avoids over-flagging enthusiastic adjective stacks")
+    parser.add_argument("--flip-analysis", action="store_true",
+                        help="also print 0°→180° sentiment-flip counts per template")
     args = parser.parse_args()
 
     stats = defaultdict(lambda: {
-        "n": 0, "REP": 0, "CN": 0, "EMPTY": 0,
+        "n": 0, "REP": 0, "CN": 0, "EMPTY": 0, "DOM": 0,
         "LOW_DIV": 0, "OFFTOPIC": 0, "any_primary": 0,
         "examples": [],
     })
+
+    # For sentiment-flip analysis: outputs[(template, tweet_id)][angle] = text
+    # and ground_truths[tweet_id] = 'positive' | 'negative' | 'neutral'
+    flip_outputs = defaultdict(dict)
+    ground_truths = {}
 
     templates_order = []
     angles_set = set()
     with open_csv(args.csv_path) as f:
         reader = csv.DictReader(f)
         schema = detect_schema(reader.fieldnames)
-        # In canonical mode we only want rows from angular / baseline. For
-        # angular, label = the angle; baseline rows are bucketed as "baseline".
+        has_gt = "ground_truth" in reader.fieldnames
+        has_tid = "tweet_id" in reader.fieldnames
         for row in reader:
             if schema["kind"] == "canonical":
                 method = row[schema["method"]]
@@ -141,7 +169,7 @@ def main():
                 templates_order.append(tname)
             angles_set.add(label)
             text = row["generated_text"]
-            prim, sec = flags_for(text)
+            prim, sec = flags_for(text, strict=args.strict)
             if not args.no_jaccard and jaccard_flag(text, row[schema["text"]]):
                 sec.add("OFFTOPIC")
             key = (tname, label)
@@ -155,6 +183,12 @@ def main():
                 s["any_primary"] += 1
                 if len(s["examples"]) < 3:
                     s["examples"].append((sorted(prim), text.strip()[:120]))
+            # Collect for flip analysis
+            if args.flip_analysis and has_tid and label != "baseline":
+                tid = row["tweet_id"]
+                flip_outputs[(tname, tid)][label] = text
+                if has_gt and tid not in ground_truths:
+                    ground_truths[tid] = row["ground_truth"]
 
     # Sort angles (baseline first, then numeric)
     def angle_sort_key(a):
@@ -258,6 +292,57 @@ def main():
                     flags, ex = s["examples"][0]
                     print(f"  {a:>5}  {','.join(flags):<10}  {ex}")
             print()
+
+    if args.flip_analysis and flip_outputs:
+        POS_WORDS = {'happy','great','wonderful','amazing','love','joy','excited',
+                     'awesome','good','best','perfect','beautiful','glad','delighted',
+                     'pleased','thrilled','fantastic','brilliant','cheerful','ecstatic',
+                     'blessed','lucky','grateful','thankful','positive','nice'}
+        NEG_WORDS = {'sad','bad','terrible','horrible','hate','angry','mad','upset',
+                     'awful','worst','disgusted','annoyed','frustrated','depressed',
+                     'furious','miserable','disappointed','gloomy','dreadful','negative',
+                     'painful','sorry','regret','worry','exhausted','tired'}
+
+        def senti_score(text):
+            t = text.lower()
+            return sum(1 for w in POS_WORDS if w in t) - sum(1 for w in NEG_WORDS if w in t)
+
+        print(f"\n=== Sentiment flip analysis (0° → 180°) ===\n")
+        print(f"{'template':<18}  {'n':>4}  {'sign_flips':>10}  "
+              f"{'mean_Δscore':>12}  {'by GT (pos→→/neg→→)':>24}")
+        for t in templates_order:
+            shifts = []
+            pos_shifts = []
+            neg_shifts = []
+            for (tpl, tid), angs in flip_outputs.items():
+                if tpl != t:
+                    continue
+                if "0" in angs and "180" in angs:
+                    s0 = senti_score(angs["0"])
+                    s180 = senti_score(angs["180"])
+                    d = s180 - s0
+                    shifts.append(d)
+                    if ground_truths.get(tid) == "positive":
+                        pos_shifts.append(d)
+                    elif ground_truths.get(tid) == "negative":
+                        neg_shifts.append(d)
+            if not shifts:
+                continue
+            flipped = sum(1 for d in shifts if d < 0) + sum(1 for d in shifts if d > 0 and False)
+            # More useful: count sign-flips (either direction)
+            sign_flips = 0
+            for (tpl, tid), angs in flip_outputs.items():
+                if tpl != t or "0" not in angs or "180" not in angs:
+                    continue
+                s0 = senti_score(angs["0"])
+                s180 = senti_score(angs["180"])
+                if (s0 > 0 and s180 < 0) or (s0 < 0 and s180 > 0):
+                    sign_flips += 1
+            mean_d = sum(shifts) / len(shifts)
+            pos_mean = sum(pos_shifts) / max(len(pos_shifts), 1) if pos_shifts else 0
+            neg_mean = sum(neg_shifts) / max(len(neg_shifts), 1) if neg_shifts else 0
+            print(f"{t:<18}  {len(shifts):>4}  {sign_flips:>10}  "
+                  f"{mean_d:>+11.2f}  pos:{pos_mean:+.2f}  neg:{neg_mean:+.2f}")
 
     # Save scores CSV next to input (stripping .gz suffix if present)
     base = args.csv_path[:-3] if args.csv_path.endswith(".gz") else args.csv_path

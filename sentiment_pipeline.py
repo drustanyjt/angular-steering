@@ -56,6 +56,23 @@ TEMPLATES = {
     "echo_en": (
         "Tweet: '{tweet}'\nThe same thing expressed in different English words:"
     ),
+    # Cross-model winners from template discovery rounds 7-12.
+    # These use "emotional reaction" framing which gives angular steering
+    # a handle to flip sentiment — templates without emotion-related
+    # language (rewrite, restate) produce clean paraphrases but suppress
+    # the sentiment shift.
+    "similar_equivalent_en": (
+        "Write a similar English tweet with an equivalent emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_parallel_en": (
+        "Write a similar English tweet with a parallel emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_reaction_en": (
+        "Write a similar English tweet with a similar emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
 }
 
 

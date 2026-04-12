@@ -11,15 +11,50 @@ are the next targets. **14B fp8 attempts on a 24 GB GPU were inconclusive**
 (see dedicated section below) — re-run them on H100 with bf16 to get a
 definitive answer.
 
-Start with:
-```bash
-bash setup_and_run.sh 14B restate,echo_en,similar_tweet_en,rewrite 15
-bash setup_and_run.sh 32B rewrite_en,echo_en,similar_tweet_en,rewrite 15
+### Cross-model winner: `similar_equivalent_en`
+
+After 12 rounds of template discovery on 3B and 7B, the best cross-model
+template is:
+
+```
+Write a similar English tweet with an equivalent emotional reaction: '{tweet}'
+Similar tweet:
 ```
 
-(The 32B template set swaps `restate` for `rewrite_en` because prior 32B
-discovery showed `restate` has the same catastrophic 270° failure as on 14B
-while `rewrite_en` cut Chinese-character leakage significantly.)
+Why it wins: "equivalent emotional reaction" gives angular steering a
+*handle* — when the rotation shifts the model's internal sentiment
+representation, the explicit emotional framing amplifies that shift into
+the generated text. Templates without emotion-related language (like
+`rewrite`) produce clean paraphrases but **suppress the sentiment shift**
+(only 2.3% flip rate vs 22.7% for similar_equivalent_en on 3B).
+
+| Template | 7B flips/150 | 3B flips/150 | Combined | 7B clean |
+|---|---|---|---|---|
+| similar_equivalent_en | 41 (27%) | 34 (23%) | **75** | 300° |
+| similar_parallel_en | 46 (31%) | 17 (11%) | 63 | 315° |
+| similar_reaction_en | 41 (27%) | 12 (8%) | 53 | 315° |
+| similar_tweet_en (R1 baseline) | 19 (13%) | 9 (6%) | 28 | 255° |
+| rewrite (cleanest) | — | 2 (1.3%) | — | 360° |
+
+### Recommended H100 commands
+
+Include `similar_equivalent_en` alongside existing templates:
+
+```bash
+bash setup_and_run.sh 14B similar_equivalent_en,rewrite_en,similar_tweet_en,rewrite 15
+bash setup_and_run.sh 32B similar_equivalent_en,rewrite_en,similar_tweet_en,rewrite 15
+```
+
+Also run template discovery on 14B/32B unquantized to see if the template
+winners change at bf16 scale:
+
+```bash
+python run_template_discovery.py --model 14B --round 9
+python run_template_discovery.py --model 32B --round 9
+```
+
+(Round 9 contains the emotion-flavoured variants that found
+similar_reaction_en as the breakthrough template.)
 
 ## What this session accomplished
 
@@ -295,18 +330,33 @@ is None. Override with `--config <path>` if you need a specific file.
 
 Defined in `sentiment_pipeline.TEMPLATES` (single source of truth):
 
-| Name | Template |
-|---|---|
-| `restate` | `Analyze the situation described in this tweet and restate the core event in a single sentence: '{tweet}'\nSingle sentence summary:` |
-| `rewrite` | `Rewrite this tweet to say the same thing in different words: '{tweet}'\nRewritten tweet:` |
-| `rewrite_en` | `Rewrite this tweet in English using different words: '{tweet}'\nRewritten tweet (English):` |
-| `paraphrase_en` | `Paraphrase this tweet in English: '{tweet}'\nParaphrase:` |
-| `similar_tweet_en` | `Write a similar tweet in English about the same topic: '{tweet}'\nSimilar tweet:` |
-| `echo_en` | `Tweet: '{tweet}'\nThe same thing expressed in different English words:` |
+**High flip strength** (emotion-framed, discovered R9-R11):
+
+| Name | Template | Notes |
+|---|---|---|
+| `similar_equivalent_en` | `Write a similar English tweet with an equivalent emotional reaction: '{tweet}'\nSimilar tweet:` | Cross-model winner (75 combined flips) |
+| `similar_parallel_en` | `Write a similar English tweet with a parallel emotional reaction: '{tweet}'\nSimilar tweet:` | Best 7B-only (46 flips, 315° clean) |
+| `similar_reaction_en` | `Write a similar English tweet with a similar emotional reaction: '{tweet}'\nSimilar tweet:` | R9 breakthrough |
+
+**Clean but low flip strength** (original templates):
+
+| Name | Template | Notes |
+|---|---|---|
+| `echo_en` | `Tweet: '{tweet}'\nThe same thing expressed in different English words:` | 7B-only: 360° clean but broken on 3B baseline |
+| `rewrite` | `Rewrite this tweet to say the same thing in different words: '{tweet}'\nRewritten tweet:` | Cleanest on 3B (0.1%) but almost no sentiment flip |
+| `rewrite_en` | `Rewrite this tweet in English using different words: '{tweet}'\nRewritten tweet (English):` | Best on 32B for CN leak prevention |
+| `similar_tweet_en` | `Write a similar tweet in English about the same topic: '{tweet}'\nSimilar tweet:` | Original cross-model baseline |
+| `restate` | `Analyze the situation and restate the core event in a single sentence: '{tweet}'\nSingle sentence summary:` | Catastrophic at 120°-270° on 7B/14B |
+| `paraphrase_en` | `Paraphrase this tweet in English: '{tweet}'\nParaphrase:` | Moderate across models |
+
+**Key insight:** Templates with emotion-related framing ("emotional
+reaction", "equivalent") produce ~10x more sentiment flips than templates
+that just paraphrase ("rewrite", "restate"). The prompt controls whether
+angular steering manifests as sentiment change or is silently absorbed.
 
 To add a new persistent template, edit `sentiment_pipeline.TEMPLATES`.
-One-off experimental variants that are only used for a specific discovery
-round live in `_AD_HOC` inside `run_template_discovery.py`.
+One-off experimental variants used only for a specific discovery round
+live in `_AD_HOC` inside `run_template_discovery.py` (rounds 2-12).
 
 ## Anti-patterns (things that made things worse)
 

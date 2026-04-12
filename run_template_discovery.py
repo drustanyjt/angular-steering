@@ -57,6 +57,152 @@ ROUND_1_NAMES = ["restate", "rewrite", "rewrite_en", "paraphrase_en",
 # Ad-hoc templates only used by later rounds. Inline so there's no
 # cross-file coupling for failed experiments.
 _AD_HOC = {
+    # Round 8: Round 7 found that all "single sentence" echo variants are
+    # clean on both models but none beat similar_tweet_en's flip strength.
+    # The parallel-construction format "Write a similar tweet" seems to
+    # flip more than restatement. Round 8 tries harder variants of
+    # similar_tweet_en plus stronger imperatives with single-sentence lock.
+    "similar_feeling_en": (
+        "Write a similar English tweet that conveys the same feeling: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_energy_en": (
+        "Write a similar English tweet with the same energy: '{tweet}'\n"
+        "Similar tweet:"
+    ),
+    "similar_single_en": (
+        "Write a similar English tweet in a single sentence: '{tweet}'\n"
+        "Similar tweet:"
+    ),
+    "rewrite_single_en": (
+        "Rewrite this tweet as a single English sentence: '{tweet}'\nRewritten:"
+    ),
+    "restate_single_en": (
+        "Restate this tweet as a single English sentence: '{tweet}'\nRestated:"
+    ),
+    "paraphrase_single_en": (
+        "Paraphrase this tweet as a single English sentence: '{tweet}'\n"
+        "Paraphrase:"
+    ),
+    # Round 9: emotion-flavoured variations of similar_feeling_en
+    "similar_mood_en": (
+        "Write a similar English tweet with the same mood: '{tweet}'\n"
+        "Similar tweet:"
+    ),
+    "similar_emotion_en": (
+        "Write a similar English tweet expressing the same emotion: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_reaction_en": (
+        "Write a similar English tweet with a similar emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_vibes_en": (
+        "Write a similar English tweet with the same vibe: '{tweet}'\n"
+        "Similar tweet:"
+    ),
+    "similar_tone_en": (
+        "Write a similar English tweet in the same tone: '{tweet}'\n"
+        "Similar tweet:"
+    ),
+    "similar_spirit_en": (
+        "Write a similar English tweet in the same spirit: '{tweet}'\n"
+        "Similar tweet:"
+    ),
+    # Round 12: synonyms of "equivalent" (R11 winner had 75 combined flips)
+    "similar_corresponding_en": (
+        "Write a similar English tweet with a corresponding emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_identical_en": (
+        "Write a similar English tweet with an identical emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_comparable_en": (
+        "Write a similar English tweet with a comparable emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_proportional_en": (
+        "Write a similar English tweet with a proportional emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_exact_en": (
+        "Write a similar English tweet with the exact same emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_precisely_en": (
+        "Write a similar English tweet with precisely the same emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    # Round 11: variants around "parallel"/"matching" — R10 discovered
+    # these are the strongest flip-inducing words.
+    "similar_twin_en": (
+        "Write a similar English tweet with a twin emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_equivalent_en": (
+        "Write a similar English tweet with an equivalent emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_analogous_en": (
+        "Write a similar English tweet with an analogous emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_resonance_en": (
+        "Write a similar English tweet with the same emotional resonance: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_strong_reaction_en": (
+        "Write a similar English tweet with a similarly strong emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    # Round 10: variants of similar_reaction_en (R9 winner)
+    "similar_mirror_en": (
+        "Write a similar English tweet mirroring the emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_intensity_en": (
+        "Write a similar English tweet with the same emotional intensity: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_parallel_en": (
+        "Write a similar English tweet with a parallel emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_matching_en": (
+        "Write a similar English tweet with a matching emotional reaction: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_response_en": (
+        "Write a similar English tweet with a similar emotional response: "
+        "'{tweet}'\nSimilar tweet:"
+    ),
+    "similar_reaction_single_en": (
+        "Write a similar English tweet with a similar emotional reaction, "
+        "in a single sentence: '{tweet}'\nSimilar tweet:"
+    ),
+    # Round 7: cross-model candidates — combine echo_en's minimal framing
+    # with a "single sentence / single line" constraint to prevent 3B's
+    # list-induction while keeping 7B's strong steering. Plus an English-lock.
+    "echo_single_en": (
+        "Tweet: '{tweet}'\nThe same idea in a single English sentence:"
+    ),
+    "echo_one_en": (
+        "Tweet: '{tweet}'\nOne English sentence expressing the same idea:"
+    ),
+    "echo_line_en": (
+        "Tweet: '{tweet}'\nA single line in English with the same meaning:"
+    ),
+    "echo_core_en": (
+        "Tweet: '{tweet}'\nThe core idea in a single English sentence:"
+    ),
+    "similar_line_en": (
+        "Write a similar line in English about the same topic: '{tweet}'\n"
+        "Similar line:"
+    ),
+    "echo_meaning_en": (
+        "Tweet: '{tweet}'\nThe same meaning in a single English sentence:"
+    ),
     # Round 2: list-expansion prevention
     "echo_quoted": 'Tweet: "{tweet}"\nThe same thing in different English words: "',
     "echo_one_sentence": (
@@ -214,6 +360,91 @@ TEMPLATES_BY_ROUND = {
         "rewrite_en_strict", "rewrite_en_strict_the",
         "rewrite_en_strict_in_english", "rewrite_en_strict_quoted",
         "rewrite_en_constraint_after", "rewrite_en_strict_imperative",
+    ]),
+
+    # Round 7: cross-model template hunt. Current best cross-model is
+    # similar_tweet_en (7B 285°, 3B 360° under strict metric) but we want
+    # to beat that. Strategy: combine echo_en's minimal framing (7B winner)
+    # with a "single sentence/line" constraint that prevents 3B's list
+    # induction (echo_en fails at 3B baseline with 3.2% flagged due to "1.
+    # Shanghai..." lists). Control: similar_tweet_en.
+    7: _round_templates([
+        "similar_tweet_en",  # control — current cross-model best
+        "echo_single_en",
+        "echo_one_en",
+        "echo_line_en",
+        "echo_core_en",
+        "similar_line_en",
+        "echo_meaning_en",
+    ]),
+
+    # Round 8: Round 7 showed all "single sentence" echo variants are
+    # clean on both models but none beat similar_tweet_en for flip
+    # strength. R8 varies the similar_tweet_en format and tries direct
+    # imperatives with a single-sentence lock.
+    8: _round_templates([
+        "similar_tweet_en",         # control
+        "similar_feeling_en",
+        "similar_energy_en",
+        "similar_single_en",
+        "rewrite_single_en",
+        "restate_single_en",
+        "paraphrase_single_en",
+    ]),
+
+    # Round 9: R8 winner was similar_feeling_en (cross-model best).
+    # Try more emotion-flavoured framings to see if any word beats
+    # "feeling" for sentiment-flip strength while staying clean on 3B.
+    9: _round_templates([
+        "similar_feeling_en",       # control — R8 winner
+        "similar_mood_en",
+        "similar_emotion_en",
+        "similar_reaction_en",
+        "similar_vibes_en",
+        "similar_tone_en",
+        "similar_spirit_en",
+    ]),
+
+    # Round 10: R9 winner similar_reaction_en dominated 7B (41 flips,
+    # 315° clean). R10 tests variants of "emotional reaction" phrasing
+    # to see if we can push further. Also tests whether adding a
+    # "single sentence" constraint keeps 3B clean without losing flip
+    # strength (since the 180° list-format was a secondary failure mode).
+    10: _round_templates([
+        "similar_reaction_en",      # control — R9 winner
+        "similar_mirror_en",
+        "similar_intensity_en",
+        "similar_parallel_en",
+        "similar_matching_en",
+        "similar_response_en",
+        "similar_reaction_single_en",
+    ]),
+
+    # Round 11: R10 found similar_parallel_en (46 flips 7B, 17 3B) and
+    # similar_matching_en (35 flips 7B, 27 3B) as cross-model champions.
+    # Try more synonyms in the same semantic space to see if anything
+    # beats them.
+    11: _round_templates([
+        "similar_parallel_en",      # control 1 — best 7B
+        "similar_matching_en",      # control 2 — best 3B
+        "similar_twin_en",
+        "similar_equivalent_en",
+        "similar_analogous_en",
+        "similar_resonance_en",
+        "similar_strong_reaction_en",
+    ]),
+
+    # Round 12: R11 discovered similar_equivalent_en (75 combined flips,
+    # 41 on 7B and 34 on 3B). Round 12 tries synonyms of "equivalent"
+    # looking for a word that pushes even further.
+    12: _round_templates([
+        "similar_equivalent_en",    # control — R11 winner
+        "similar_corresponding_en",
+        "similar_identical_en",
+        "similar_comparable_en",
+        "similar_proportional_en",
+        "similar_exact_en",
+        "similar_precisely_en",
     ]),
 }
 
