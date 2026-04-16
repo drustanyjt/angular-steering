@@ -48,10 +48,12 @@ python pytorch_pure/extract_directions_tsad.py \
     --strategy both
 ```
 
-This runs difference-in-means over contrastive positive/negative tweet pairs
-and performs PCA over the per-layer candidate directions (following
-Vu & Nguyen 2025), writing the steering basis to
-`output/<model>/directions.npy`.
+This runs a CAA-style group-level difference-in-means over two independent
+groups of positive and negative tweets (no per-sentence pairing), and then
+computes the first principal component of the per-layer candidate directions
+following Vu & Nguyen 2025 for the second axis. The result is a hybrid
+steering plane: CAA-style first axis, PCA-over-layers second axis. Output is
+written to `output/<model>/steering_config-*.npy`.
 
 Re-run with `--model Qwen/Qwen2.5-{3B,14B,32B}-Instruct` for the other sizes
 reported in the paper.
